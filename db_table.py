@@ -1,5 +1,5 @@
 from sqlalchemy import BOOLEAN, TIMESTAMP, Column, ForeignKey, Integer, String
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
 
@@ -11,13 +11,19 @@ class UserDB(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user = Column(String, index=True)
 
+    def __repr__(self):
+        return f"User(id={self.id!r}, path={self.user!r})"
+
 
 class URLsDB(Base):
     """Database table to store unique urls"""
     __tablename__ = 'urls'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user = Column(String, index=True)
+    url = Column(String, index=True)
+
+    def __repr__(self):
+        return f"User(id={self.id!r}, path={self.url!r})"
 
 
 class CommentsDB(Base):
@@ -31,10 +37,8 @@ class CommentsDB(Base):
     date = Column(TIMESTAMP)
     last = Column(BOOLEAN)
 
-    homeworks = relationship('HomeworkResultTable', backref='student')
-
     def __repr__(self):
         return f"Comment(id={self.id!r}, path={self.path!r}," \
-               f" user_id={self.user_id!r}, url_id={self.url_id!r})," \
-               f" user_id={self.comment!r}, url_id={self.date!r}), " \
-               f" user_id={self.last!r}"
+               f" user_id={self.user_id!r}, url_id={self.url_id!r}," \
+               f" comment={self.comment!r}, date={self.date!r}, " \
+               f" last={self.last!r})"
