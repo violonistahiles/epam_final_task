@@ -26,17 +26,17 @@ def create_models(engine):
                            date=datetime.strptime('21:01:10', '%y:%m:%d'),
                            last=False)
 
-    comment_2 = CommentsDB(path='1.2', user_id=2, url_id=1,
+    comment_3 = CommentsDB(path='1.2', user_id=2, url_id=1,
                            comment='1.2 comment',
                            date=datetime.strptime('21:01:10', '%y:%m:%d'),
                            last=True)
 
-    comment_3 = CommentsDB(path='2', user_id=2, url_id=2,
+    comment_4 = CommentsDB(path='2', user_id=2, url_id=2,
                            comment='first comment',
                            date=datetime.strptime('21:01:10', '%y:%m:%d'),
                            last=True)
 
-    comment_4 = CommentsDB(path='1.1.1', user_id=2, url_id=1,
+    comment_5 = CommentsDB(path='1.1.1', user_id=2, url_id=1,
                            comment='1.1.1 comment',
                            date=datetime.strptime('21:01:10', '%y:%m:%d'),
                            last=True)
@@ -50,6 +50,7 @@ def create_models(engine):
         session.add(comment_2)
         session.add(comment_3)
         session.add(comment_4)
+        session.add(comment_5)
         session.commit()
 
     return engine

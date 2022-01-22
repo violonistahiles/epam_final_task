@@ -1,4 +1,4 @@
-from materialized_path import PathProcessor
+from path_worker import PathProcessor
 
 
 def test_child_path_creation_when_child_exists():
