@@ -19,12 +19,12 @@ def create_models(engine):
     comment_1 = CommentsDB(path='1', user_id=1, url_id=1,
                            comment='first comment',
                            date=datetime.strptime('21:01:10', '%y:%m:%d'),
-                           last=True)
+                           last=False)
 
     comment_2 = CommentsDB(path='1.1', user_id=1, url_id=1,
                            comment='1.1 comment',
                            date=datetime.strptime('21:01:10', '%y:%m:%d'),
-                           last=True)
+                           last=False)
 
     comment_2 = CommentsDB(path='1.2', user_id=2, url_id=1,
                            comment='1.2 comment',
@@ -36,6 +36,11 @@ def create_models(engine):
                            date=datetime.strptime('21:01:10', '%y:%m:%d'),
                            last=True)
 
+    comment_4 = CommentsDB(path='1.1.1', user_id=2, url_id=1,
+                           comment='1.1.1 comment',
+                           date=datetime.strptime('21:01:10', '%y:%m:%d'),
+                           last=True)
+
     with Session(engine) as session:
         session.add(user_first)
         session.add(user_second)
@@ -44,6 +49,7 @@ def create_models(engine):
         session.add(comment_1)
         session.add(comment_2)
         session.add(comment_3)
+        session.add(comment_4)
         session.commit()
 
     return engine
