@@ -1,6 +1,4 @@
-import csv
 import datetime
-import json
 import os
 from typing import Any, Callable, Dict, List, Union
 
@@ -49,35 +47,7 @@ class DBClient:
         self._engine = engine
         self._path_pr = PathProcessor()
         self._qhelper = QueryHelper(self._path_pr.filters)
-        self._keys = ['comment_id', 'user', 'comment', 'date']
-
-    @staticmethod
-    def _save_json(data_dict: Dict, data_path: str) -> None:
-        """
-        Save query result to .json file
-        :param data_dict: Dictionary with query result
-        :type data_dict: Dict
-        :param data_path: Path to .json file
-        :type data_path: str
-        """
-        with open(data_path, 'w') as f:
-            json.dump(data_dict, f)
-
-    def _save_csv(self, data: Dict, file_path: str) -> None:
-        """
-        Save query result to .csv file
-        :param data: Dictionary with values for single line in .csv file
-        :type data: Dict
-        :param file_path: path to .csv file
-        :type file_path: str
-        """
-        with open(file_path, 'w', newline='') as fi:
-            report = csv.writer(fi)
-            report.writerow(self._keys)
-            for ind in data:
-                data_list = [data[ind][key] for key in self._keys]
-                data_list[-1] = datetime.datetime.fromtimestamp(data_list[-1])
-                report.writerow(data_list)
+        self.keys = ['comment_id', 'user', 'comment', 'date']
 
     @staticmethod
     def _select(session: Session, table: Base, **kwargs: Any) -> Query:
@@ -168,7 +138,7 @@ class DBClient:
         return path
 
     @session_decorator
-    def _add_comment(
+    def add_comment(
             self,
             session: Session,
             parent_id: int,
@@ -195,6 +165,7 @@ class DBClient:
         :return: Created comment ID
         :rtype: int
         """
+        print(parent_id, url)
         user_id = self._get_id(session, UserDB, user=user)
         if parent_id:
             parent = self._select(session, CommentsDB, id=parent_id).one()
@@ -288,7 +259,7 @@ class DBClient:
         query = self._qhelper.modify_data(query, **kwargs)
         return query.all()
 
-    def _get_url_comments(self, url: str, **kwargs: Any) -> str:
+    def get_url_comments(self, url: str, **kwargs: Any) -> Dict:
         """
         Create json for requested url inheritors
         :param url: URL Address
@@ -299,16 +270,16 @@ class DBClient:
         :rtype: Dict
         """
         result = self._ger_url_inheritors(url, **kwargs)
-        comments_dict = self._path_pr.create_sorted_dict(result, self._keys)
+        comments_dict = self._path_pr.create_sorted_dict(result, self.keys)
         return comments_dict
 
-    def _get_comment_tree(
+    def get_comment_tree(
             self,
             url: str,
             comment_id: Union[None, str] = None,
             first_level: bool = False,
             **kwargs: Any
-    ) -> str:
+    ) -> Dict:
         """
         Create json for requested url or comment inheritors
         :param url: URL address
@@ -327,10 +298,10 @@ class DBClient:
             tree = self._path_pr.cut_paths(tree)
         else:
             tree = self._ger_url_inheritors(url, first_level, **kwargs)
-        comments_dict = self._path_pr.create_sorted_dict(tree, self._keys)
+        comments_dict = self._path_pr.create_sorted_dict(tree, self.keys)
         return comments_dict
 
-    def _get_user_history(self, user: str, **kwargs: Any) -> str:
+    def get_user_history(self, user: str, **kwargs: Any) -> Dict:
         """
         Create json for requested user comments history
         :param user: Username
@@ -341,19 +312,17 @@ class DBClient:
         :rtype: Dict
         """
         result = self._get_user_comments(user, **kwargs)
-        comments_dict = self._path_pr.create_dict(result, self._keys)
+        comments_dict = self._path_pr.create_dict(result, self.keys)
         return comments_dict
 
-    def _save_results(
+    def prepare_data_to_report(
             self,
-            file_path: str,
             url: Union[None, str] = None,
             user: Union[None, str] = None,
             **kwargs: Any
     ) -> Dict:
         """
         Get user or url comments history
-        :param file_path:
         :param user: Username
         :type user: str
         :param url: URL address
@@ -364,37 +333,37 @@ class DBClient:
         :rtype: Dict
         """
         if user:
-            result_dict = self._get_user_history(user, **kwargs)
+            result_dict = self.get_user_history(user, **kwargs)
         elif url:
             result = self._ger_url_inheritors(url, first_level=False, **kwargs)
-            result_dict = self._path_pr.create_dict(result, self._keys)
+            result_dict = self._path_pr.create_dict(result, self.keys)
         else:
             result_dict = {}
 
-        self._save_csv(result_dict, file_path)
+        return result_dict
 
 
 if __name__ == '__main__':
     engine = create_engine('sqlite:///:memory:')
     create_models(engine)
     db_client = DBClient(engine)
-    _ = db_client._add_comment(1, 'url_1', 'Luke', 'SkyWalker?')
-    _ = db_client._add_comment(None, 'url_3', 'Luke', 'SkyWalker?')
-    _ = db_client._add_comment(3, 'url_2', 'Dart', 'ALALA')
-    _ = db_client._add_comment(2, 'url_2', 'Dart', 'StarKiller')
-    _ = db_client._add_comment(1, 'url_1', 'Jaka', 'StarLord')
-    _ = db_client._add_comment(None, 'url_1', 'Wuki', 'AAARRRR')
+    _ = db_client.add_comment(1, 'url_1', 'Luke', 'SkyWalker?')
+    _ = db_client.add_comment(None, 'url_3', 'Luke', 'SkyWalker?')
+    _ = db_client.add_comment(3, 'url_2', 'Dart', 'ALALA')
+    _ = db_client.add_comment(2, 'url_2', 'Dart', 'StarKiller')
+    _ = db_client.add_comment(1, 'url_1', 'Jaka', 'StarLord')
+    _ = db_client.add_comment(None, 'url_1', 'Wuki', 'AAARRRR')
 
-    comments = db_client._get_url_comments('url_1')
-    comments_dict = db_client._get_comment_tree(url='url_1', comment_id=1)
-    user_comments = db_client._get_user_history(user='Luke', do_sort=True)
+    comments = db_client.get_url_comments('url_1')
+    comments_dict = db_client.get_comment_tree(url='url_1', comment_id=1)
+    user_comments = db_client.get_user_history(user='Luke', do_sort=True)
 
     curr_path = os.getcwd()
     results_path = os.path.join(curr_path, 'build')
 
     csv_path = os.path.join(results_path, 'result.csv')
-    db_client._save_results(csv_path, user='', url='url_1',
-                            do_sort=True, end=600)
+    db_client.prepare_data_to_report(csv_path, user='', url='url_1',
+                                     do_sort=True, end=600)
 
     print(comments_dict)
     print(comments)
