@@ -16,6 +16,7 @@ from tester import create_models, print_tables
 
 def session_decorator(func):
     """Decorator to perform database session"""
+
     def wrapper(self, *args, **kwargs):
         with Session(self._engine) as session:
             try:
@@ -23,6 +24,7 @@ def session_decorator(func):
             except NoResultFound:
                 return {}
         return result
+
     return wrapper
 
 
@@ -39,7 +41,7 @@ class DBClient:
             json.dump(data_dict, f)
 
     @staticmethod
-    def _save_results(data: List, file_path, first: bool = False):
+    def _save_csv_line(data: List, file_path, first: bool = False):
         """
         Save single data row to report.csv
         :param data: List with values for single line in .csv file
@@ -89,6 +91,20 @@ class DBClient:
         return query
 
     @staticmethod
+    def _sort_by_time(query, do_sort=False):
+        return query.order_by(CommentsDB.date) if do_sort else query
+
+    def _modify_data(self, query, **kwargs):
+        if 'last' in kwargs:
+            query = self._filter_by_actuality(query, last=kwargs['last'])
+        if 'do_sort' in kwargs:
+            query = self._sort_by_time(query, do_sort=kwargs['do_sort'])
+        if 'start' in kwargs or 'end' in kwargs:
+            query = self._filter_by_time(query, start=kwargs['start'],
+                                         end=kwargs['end'])
+        return query
+
+    @staticmethod
     def _check_query(query):
         try:
             result = query.one()
@@ -96,22 +112,22 @@ class DBClient:
             return
         return result
 
-    def _child_path(self, session, path, last=True):
+    def _child_path(self, session, path, **kwargs):
         path_filter = path + self.path_pr.filters['child']
         path_filter_dot = path + self.path_pr.filters['child_dot']
 
         query = session.query(CommentsDB).filter(and_(
             CommentsDB.path.regexp_match(path_filter),
             not_(CommentsDB.path.regexp_match(path_filter_dot))))
-        query = self._filter_by_actuality(query, last=last)
+        query = self._modify_data(query, **kwargs)
 
         return query
 
-    def _first_level_paths(self, session, last=True):
+    def _first_level_paths(self, session, **kwargs):
         query = session.query(CommentsDB).filter(not_(
             CommentsDB.path.regexp_match(
                 self.path_pr.filters['first_level'])))
-        query = self._filter_by_actuality(query, last=last)
+        query = self._modify_data(query, **kwargs)
 
         return query
 
@@ -178,44 +194,59 @@ class DBClient:
 
     @session_decorator
     def _ger_url_inheritors(
-            self, session, url, first_level=True, start=None, end=None
+            self, session, url, first_level=True, **kwargs
     ):
         url_id = self._get_id(session, URLsDB, url=url)
         query = self._get_base_query(session)
         query = query.filter(CommentsDB.url_id == url_id)
+        query = self._modify_data(query, **kwargs)
         if first_level:
             query = query.filter(not_(CommentsDB.path.regexp_match(
                 self.path_pr.filters['first_level'])))
-        if start or end:
-            query = self._filter_by_time(query, start, end)
 
         return query.all()
 
     @session_decorator
-    def _get_user_comments(self, session, user):
+    def _get_user_comments(self, session, user, **kwargs):
         user_id = self._get_id(session, UserDB, user=user)
         query = self._get_base_query(session)
         query = query.filter(CommentsDB.user_id == user_id)
-        result = query.order_by(CommentsDB.date).all()
-        return result
+        query = self._modify_data(query, **kwargs)
+        return query.all()
 
     def _get_url_comments(self, url, **kwargs):
         result = self._ger_url_inheritors(url, **kwargs)
         comments_dict = self.path_pr.create_sorted_dict(result, self.keys)
         return comments_dict
 
-    def _get_inheritors(self, url, comment_id=None):
+    def _get_comment_tree(
+            self, url, comment_id=None, first_level=True, **kwargs
+    ):
         if comment_id:
             tree = self._get_comment_inheritors(comment_id)
         else:
-            tree = self._ger_url_inheritors(url, first_level=False)
+            tree = self._ger_url_inheritors(url, first_level, **kwargs)
         comments_dict = self.path_pr.create_sorted_dict(tree, self.keys)
         return comments_dict
 
-    def _get_user_history(self, user):
-        result = self._get_user_comments(user)
+    def _get_user_history(self, user, **kwargs):
+        result = self._get_user_comments(user, **kwargs)
         comments_dict = self.path_pr.create_dict(result, self.keys)
         return comments_dict
+
+    def _save_results(self, file_path, user=None, url=None, **kwargs):
+        if user:
+            result_dict = self._get_user_history(user, **kwargs)
+        else:
+            result = self._ger_url_inheritors(url, first_level=False, **kwargs)
+            result_dict = self.path_pr.create_dict(result, self.keys)
+
+        self._save_csv_line(['Comment ID', 'User', 'Comment', 'Date'],
+                            file_path, first=True)
+
+        for ind in result_dict:
+            data_list = [result_dict[ind][key] for key in self.keys]
+            self._save_csv_line(data_list, file_path, first=False)
 
 
 if __name__ == '__main__':
@@ -230,8 +261,9 @@ if __name__ == '__main__':
     _ = db_client._put_comment(None, 'url_1', 'Wuki', 'AAARRRR')
 
     comments = db_client._get_url_comments('url_1')
-    comments_dict = db_client._get_inheritors(url='url_1', comment_id=None)
-    user_comments = db_client._get_user_history(user='Luke')
+    comments_dict = db_client._get_comment_tree(url='url_1', comment_id=None,
+                                                first_level=False)
+    user_comments = db_client._get_user_history(user='Luke', do_sort=True)
 
     curr_path = os.getcwd()
     results_path = os.path.join(curr_path, 'build')
@@ -239,6 +271,9 @@ if __name__ == '__main__':
     db_client.save_json(comments, os.path.join(results_path, 'url.json'))
     db_client.save_json(comments_dict, os.path.join(results_path, 'inh.json'))
     db_client.save_json(user_comments, os.path.join(results_path, 'user.json'))
+
+    csv_path = os.path.join(results_path, 'result.csv')
+    db_client._save_results(csv_path, user='', url='url_1', do_sort=True)
 
     print(comments_dict)
 
