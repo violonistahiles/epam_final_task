@@ -1,10 +1,8 @@
 class PathProcessor:
 
     def __init__(self):
-        self.filters = {'child': r'\..*',
-                        'child_dot': r'\..*\.',
-                        'first_level': r'(.*\..*)',
-                        }
+        self.filters = {'inherits_one_level': r'\..*\.',
+                        'first_level': r'(.*\..*)'}
 
     @staticmethod
     def decode(path):
@@ -26,6 +24,16 @@ class PathProcessor:
     @staticmethod
     def next_path(path='1', first=True):
         return path if first else str(int(path) + 1)
+
+    @staticmethod
+    def cut_paths(comments):
+        result = []
+        for i, comment in enumerate(comments):
+            path = comment[0]
+            path = path[path.find('.')+1:]
+            result.append([path, *comments[i][1:]])
+
+        return result
 
     @staticmethod
     def create_sorted_dict(comments, keys):

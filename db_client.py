@@ -9,7 +9,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Query, Session
 
-from db_table import CommentsDB, URLsDB, UserDB
+from db_table import Base, CommentsDB, URLsDB, UserDB
 from path_worker import PathProcessor
 from tester import create_models, print_tables
 
@@ -17,7 +17,6 @@ from tester import create_models, print_tables
 def session_decorator(func: Callable) -> Callable:
     """
     Decorator to perform database session and close it after transaction
-
     :param func: Function with database transactions
     :type func: Callable
     :return: Function which decorate initial function with ORM Session
@@ -40,6 +39,9 @@ def session_decorator(func: Callable) -> Callable:
 
 class QueryHelper:
     """Service class to handle basic operations with database query"""
+    def __init__(self, filters):
+        self._path_filters = filters
+
     @staticmethod
     def _filter_by_time(
             query: Query,
@@ -48,15 +50,14 @@ class QueryHelper:
     ) -> Query:
         """
         Filter data by time interval
-
         :param query: Query to database
-        :type query: Query
+        :type query: sqlalchemy.orm.Query
         :param start: Optional, if specified: start of time interval
         :type start: Union[bool, float]
         :param end: Optional, if specified: end of time interval
         :type end: Union[bool, float]
         :return: Modified query
-        :rtype: Query
+        :rtype: sqlalchemy.orm.Query
         """
 
         start = start if start else 0
@@ -83,9 +84,9 @@ class QueryHelper:
         """
         Create basic query to database
         :param session: Manages persistence operations for ORM-mapped objects
-        :type session: Session
+        :type session: sqlalchemy.orm.Session
         :return: Query
-        :rtype: Query
+        :rtype: sqlalchemy.orm.Query
         """
         query = session.query(
             CommentsDB.path,
@@ -96,14 +97,50 @@ class QueryHelper:
         ).join(UserDB)
         return query
 
+    def child_path(
+            self, query, path: str) -> Query:
+        """
+        Filter query for nested
+        :param query:
+        :param path:
+        :return:
+        """
+        path_filter = path + '.'
+        query = query.filter(CommentsDB.path.startswith(path_filter))
+        return query
+
+    def one_level_child_path(
+            self, query, path: str) -> Query:
+        """
+
+        :param query:
+        :param path:
+        :return:
+        """
+        path_filter = path + self._path_filters['inherits_one_level']
+        query = self.child_path(query, path)
+        query = query.filter(not_(CommentsDB.path.regexp_match(path_filter)))
+        return query
+
+    def first_level_path(self, query: Query) -> Query:
+        """
+
+        :param query:
+        :return:
+        """
+        path_filter = self._path_filters['first_level']
+        query = query.filter(not_(CommentsDB.path.regexp_match(path_filter)))
+
+        return query
+
     @staticmethod
     def check_query(query: Query) -> Union[Query, None]:
         """
         Check if query return nothing
         :param query: Query to database
-        :type query: Query
+        :type query: sqlalchemy.orm.Query
         :return: Query if result is not empty, else None
-        :rtype: Union[Query, None]
+        :rtype: Union[sqlalchemy.orm.Query, None]
         """
         try:
             result = query.one()
@@ -111,15 +148,15 @@ class QueryHelper:
             return
         return result
 
-    def modify_data(self, query, **kwargs):
+    def modify_data(self, query: Query, **kwargs: Any) -> Query:
         """
         Apply selected filters for query
         :param query: Query to database
-        :type query: Query
+        :type query: sqlalchemy.orm.Query
         :param kwargs: Keyword arguments containing filter parameters
         :type kwargs: Any
         :return: Modified query
-        :rtype: Query
+        :rtype: sqlalchemy.orm.Query
         """
         last = self._parse_parameter('last', **kwargs)
         do_sort = self._parse_parameter('do_sort', **kwargs)
@@ -137,21 +174,33 @@ class QueryHelper:
 
 
 class DBClient:
-
+    """Class to perform database transaction operations"""
     def __init__(self, engine: Engine):
+        """
+        Initialize class
+        :param engine: Object establishing connection to database
+        :type engine: sqlalchemy.engine.Engine
+        """
         self._engine = engine
-        self.path_pr = PathProcessor()
-        self._qhelper = QueryHelper()
-        self.keys = ['comment_id', 'user', 'comment', 'date']
+        self._path_pr = PathProcessor()
+        self._qhelper = QueryHelper(self._path_pr.filters)
+        self._keys = ['comment_id', 'user', 'comment', 'date']
 
     @staticmethod
-    def _save_json(data_dict, data_path):
+    def _save_json(data_dict: Dict, data_path: str) -> None:
+        """
+        Save query result to .json file
+        :param data_dict: Dictionary with query result
+        :type data_dict: Dict
+        :param data_path: Path to .json file
+        :type data_path: str
+        """
         with open(data_path, 'w') as f:
             json.dump(data_dict, f)
 
-    def _save_csv(self, data: Dict, file_path):
+    def _save_csv(self, data: Dict, file_path: str) -> None:
         """
-        Save single data row to report.csv
+        Save query result to .csv file
         :param data: Dictionary with values for single line in .csv file
         :type data: Dict
         :param file_path: path to .csv file
@@ -159,23 +208,53 @@ class DBClient:
         """
         with open(file_path, 'w', newline='') as fi:
             report = csv.writer(fi)
-            report.writerow(self.keys)
+            report.writerow(self._keys)
             for ind in data:
-                data_list = [data[ind][key] for key in self.keys]
+                data_list = [data[ind][key] for key in self._keys]
                 data_list[-1] = datetime.datetime.fromtimestamp(data_list[-1])
                 report.writerow(data_list)
 
     @staticmethod
-    def _select(session, table, **kwargs):
+    def _select(session: Session, table: Base, **kwargs: Any) -> Query:
+        """
+        Filter data from database table
+        :param session: Manages persistence operations for ORM-mapped objects
+        :type session: sqlalchemy.orm.Session
+        :param table: Database table
+        :type table: sqlalchemy.orm.declarative_base
+        :param kwargs: Filter parameters
+        :type kwargs: Any
+        :return: Query
+        :rtype: sqlalchemy.orm.Query
+        """
         return session.query(table).filter_by(**kwargs)
 
     @staticmethod
-    def _add_to_bd(session, table, **kwargs):
+    def _add_to_bd(session: Session, table: Base, **kwargs: Any) -> None:
+        """
+        Add table raw instance to database
+        :param session: Manages persistence operations for ORM-mapped objects
+        :type session: sqlalchemy.orm.Session
+        :param table: Database table
+        :type table: sqlalchemy.orm.declarative_base
+        :param kwargs: Parameters for ORM class creation
+        :type kwargs: Any
+        """
         sample = table(**kwargs)
         session.add(sample)
         session.commit()
 
-    def _get_id(self, session, table, **kwargs):
+    def _get_id(self, session: Session, table: Base, **kwargs: Any) -> int:
+        """
+        Get element ID from database table
+        :param session: Manages persistence operations for ORM-mapped objects
+        :type session: sqlalchemy.orm.Session
+        :param table: Database table
+        :type table: sqlalchemy.orm.declarative_base
+        :param kwargs: Filter parameters
+        :type kwargs: Any
+        :return:
+        """
         try:
             sample_id = self._select(session, table, **kwargs).one()
         except NoResultFound:
@@ -183,49 +262,58 @@ class DBClient:
             sample_id = self._select(session, table, **kwargs).one()
         return sample_id.id
 
-    def _child_path(self, session, path, **kwargs):
-        path_filter = path + self.path_pr.filters['child']
-        path_filter_dot = path + self.path_pr.filters['child_dot']
-
-        query = session.query(CommentsDB).filter(and_(
-            CommentsDB.path.regexp_match(path_filter),
-            not_(CommentsDB.path.regexp_match(path_filter_dot))))
-        query = self._qhelper.modify_data(query, **kwargs)
-
-        return query
-
-    def _first_level_paths(self, session, **kwargs):
-        query = session.query(CommentsDB).filter(not_(
-            CommentsDB.path.regexp_match(
-                self.path_pr.filters['first_level'])))
-        query = self._qhelper.modify_data(query, **kwargs)
-
-        return query
-
     def _create_child_path(self, session, parent_path):
-        last_child = self._child_path(session, parent_path, last=True)
-        last_child = self._qhelper.check_query(last_child)
+        """
+
+        :param session: Manages persistence operations for ORM-mapped objects
+        :type session: sqlalchemy.orm.Session
+        :param parent_path:
+        :return:
+        """
+        query = session.query(CommentsDB)
+        query = self._qhelper.one_level_child_path(query, parent_path)
+        query = self._qhelper.modify_data(query, last=True)
+        last_child = self._qhelper.check_query(query)
         if last_child:
-            path = self.path_pr.next_child_path(last_child.path, first=False)
+            path = self._path_pr.next_child_path(last_child.path, first=False)
             last_child.last = False
         else:
-            path = self.path_pr.next_child_path(parent_path)
+            path = self._path_pr.next_child_path(parent_path)
         return path
 
     def _create_first_level_path(self, session):
-        last_comment = self._first_level_paths(session, last=True)
-        last_comment = self._qhelper.check_query(last_comment)
+        """
+
+        :param session: Manages persistence operations for ORM-mapped objects
+        :type session: sqlalchemy.orm.Session
+        :return:
+        """
+        query = session.query(CommentsDB)
+        query = self._qhelper.first_level_path(query)
+        query = self._qhelper.modify_data(query, last=True)
+        last_comment = self._qhelper.check_query(query)
         if last_comment:
-            path = self.path_pr.next_path(last_comment.path, first=False)
+            path = self._path_pr.next_path(last_comment.path, first=False)
             last_comment.last = False
         else:
-            path = self.path_pr.next_path()
+            path = self._path_pr.next_path()
         return path
 
     @session_decorator
     def _put_comment(
             self, session, parent_id, url, user, comment, last=True
     ):
+        """
+
+        :param session: Manages persistence operations for ORM-mapped objects
+        :type session: sqlalchemy.orm.Session
+        :param parent_id:
+        :param url:
+        :param user:
+        :param comment:
+        :param last:
+        :return:
+        """
         user_id = self._get_id(session, UserDB, user=user)
         if parent_id:
             parent = self._select(session, CommentsDB, id=parent_id).one()
@@ -247,27 +335,50 @@ class DBClient:
 
     @session_decorator
     def _get_comment_inheritors(self, session, comment_id):
+        """
+
+        :param session: Manages persistence operations for ORM-mapped objects
+        :type session: sqlalchemy.orm.Session
+        :param comment_id:
+        :return:
+        """
         parent = self._select(session, CommentsDB, id=comment_id).one()
         query = self._qhelper.get_base_query(session)
-        result = query.filter(CommentsDB.path.startswith(parent.path)).all()
+        result = self._qhelper.child_path(query, parent.path).all()
         return result
 
     @session_decorator
     def _ger_url_inheritors(
             self, session, url, first_level=True, **kwargs
     ):
+        """
+
+        :param session: Manages persistence operations for ORM-mapped objects
+        :type session: sqlalchemy.orm.Session
+        :param url:
+        :param first_level:
+        :param kwargs:
+        :return:
+        """
         url_id = self._get_id(session, URLsDB, url=url)
         query = self._qhelper.get_base_query(session)
         query = query.filter(CommentsDB.url_id == url_id)
         query = self._qhelper.modify_data(query, **kwargs)
         if first_level:
-            query = query.filter(not_(CommentsDB.path.regexp_match(
-                self.path_pr.filters['first_level'])))
+            query = self._qhelper.first_level_path(query)
 
         return query.all()
 
     @session_decorator
     def _get_user_comments(self, session, user, **kwargs):
+        """
+
+        :param session: Manages persistence operations for ORM-mapped objects
+        :type session: sqlalchemy.orm.Session
+        :param user:
+        :param kwargs:
+        :return:
+        """
         user_id = self._get_id(session, UserDB, user=user)
         query = self._qhelper.get_base_query(session)
         query = query.filter(CommentsDB.user_id == user_id)
@@ -276,7 +387,7 @@ class DBClient:
 
     def _get_url_comments(self, url, **kwargs):
         result = self._ger_url_inheritors(url, **kwargs)
-        comments_dict = self.path_pr.create_sorted_dict(result, self.keys)
+        comments_dict = self._path_pr.create_sorted_dict(result, self._keys)
         return comments_dict
 
     def _get_comment_tree(
@@ -284,14 +395,15 @@ class DBClient:
     ):
         if comment_id:
             tree = self._get_comment_inheritors(comment_id)
+            tree = self._path_pr.cut_paths(tree)
         else:
             tree = self._ger_url_inheritors(url, first_level, **kwargs)
-        comments_dict = self.path_pr.create_sorted_dict(tree, self.keys)
+        comments_dict = self._path_pr.create_sorted_dict(tree, self._keys)
         return comments_dict
 
     def _get_user_history(self, user, **kwargs):
         result = self._get_user_comments(user, **kwargs)
-        comments_dict = self.path_pr.create_dict(result, self.keys)
+        comments_dict = self._path_pr.create_dict(result, self._keys)
         return comments_dict
 
     def _save_results(self, file_path, user=None, url=None, **kwargs):
@@ -299,7 +411,7 @@ class DBClient:
             result_dict = self._get_user_history(user, **kwargs)
         else:
             result = self._ger_url_inheritors(url, first_level=False, **kwargs)
-            result_dict = self.path_pr.create_dict(result, self.keys)
+            result_dict = self._path_pr.create_dict(result, self._keys)
 
         self._save_csv(result_dict, file_path)
 
@@ -316,7 +428,7 @@ if __name__ == '__main__':
     _ = db_client._put_comment(None, 'url_1', 'Wuki', 'AAARRRR')
 
     comments = db_client._get_url_comments('url_1')
-    comments_dict = db_client._get_comment_tree(url='url_1', comment_id=None,
+    comments_dict = db_client._get_comment_tree(url='url_1', comment_id=1,
                                                 first_level=False)
     user_comments = db_client._get_user_history(user='Luke', do_sort=True)
 
@@ -337,6 +449,5 @@ if __name__ == '__main__':
     for comment in comments:
         print(comments[comment])
     print("Comments tree")
-    print(datetime.datetime.fromtimestamp(comments_dict['1']['date']))
 
     print_tables(engine)
