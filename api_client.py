@@ -12,15 +12,15 @@ from tester import create_models, print_tables
 
 class RequestData:
     """Class to store parsed request data"""
-    def __init__(self, command, request_data):
+    def __init__(self, command, attrs):
         """
         :param command: Requested command
         :type command: str
         :param request_data: Request parameters
-        :type request_data: str
+        :type request_data: Dict
         """
         self.command = command
-        self.data = request_data
+        self.attrs = attrs
 
 
 class APIClient:
@@ -100,17 +100,17 @@ class APIClient:
         :return: JSON string with response data
         :rtype: str
         """
-        command, attrs = self._parse_request(request)
-        if command == 'add_comment':
-            result = self._db_client.add_comment(**attrs)
-        elif command == 'ger_url_first_level_comments':
-            result = self._db_client.get_url_comments(**attrs)
-        elif command == 'get_comment_tree':
-            result = self._db_client.get_comment_tree(**attrs)
-        elif command == 'get_user_history':
-            result = self._db_client.get_user_history(**attrs)
-        elif command == 'get_report':
-            data_dict = self._db_client.prepare_data_to_report(**attrs)
+        data = self._parse_request(request)
+        if data.command == 'add_comment':
+            result = self._db_client.add_comment(**data.attrs)
+        elif data.command == 'ger_url_first_level_comments':
+            result = self._db_client.get_url_comments(**data.attrs)
+        elif data.command == 'get_comment_tree':
+            result = self._db_client.get_comment_tree(**data.attrs)
+        elif data.command == 'get_user_history':
+            result = self._db_client.get_user_history(**data.attrs)
+        elif data.command == 'get_report':
+            data_dict = self._db_client.prepare_data_to_report(**data.attrs)
             report_dir = os.path.join(os.getcwd(), 'build')
             report_path = self._save_csv(data_dict, report_dir)
             result = report_path
@@ -136,16 +136,16 @@ if __name__ == '__main__':
     #            'url': 'url_1',
     #            'comment_id': None}
     #
-    request = {'command': 'get_user_history',
-               'user': 'Luke',
-               'do_sort': True}
+    # request = {'command': 'get_user_history',
+    #            'user': 'Luke',
+    #            'do_sort': True}
 
-    # request = {'command': 'get_report',
-    #            'url': 'url_1',
-    #            'user': 'Dart',
-    #            'do_sort': True,
-    #            'start': 100,
-    #            'end': None}
+    request = {'command': 'get_report',
+               'url': 'url_1',
+               'user': 'Luke',
+               'do_sort': True,
+               'start': 100,
+               'end': None}
 
     print(request)
     api_client = APIClient(engine)

@@ -26,7 +26,7 @@ def create_models(engine):
 
     comment_3 = CommentsDB(path='1.2', user_id=2, url_id=1,
                            comment='1.2 comment',
-                           date=145.0,
+                           date=14.0,
                            last=True)
 
     comment_4 = CommentsDB(path='2', user_id=2, url_id=2,
