@@ -131,7 +131,11 @@ class QueryHelper:
         Apply selected filters for query
         :param query: Query to database
         :type query: sqlalchemy.orm.Query
-        :param kwargs: Keyword arguments containing filter parameters
+        :param kwargs: Keyword arguments containing filter parameters:
+            :start: (float) Start of time interval for filtering data
+            :end: (float) End of time interval for filtering data
+            :last: (bool) Get only last actual comments
+            :do_sort: (bool) Sort data by time
         :type kwargs: Any
         :return: Modified query
         :rtype: sqlalchemy.orm.Query

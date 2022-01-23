@@ -27,6 +27,7 @@ class URLsDB(Base):
 
 
 class CommentsDB(Base):
+    """Database table to store unique comments"""
     __tablename__ = 'comments'
 
     id = Column(Integer, primary_key=True, autoincrement=True)

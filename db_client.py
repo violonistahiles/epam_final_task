@@ -2,7 +2,7 @@ import csv
 import datetime
 import json
 import os
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, List, Union
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
@@ -127,13 +127,15 @@ class DBClient:
             sample_id = self._select(session, table, **kwargs).one()
         return sample_id.id
 
-    def _create_child_path(self, session, parent_path):
+    def _create_child_path(self, session: Session, parent_path: str) -> str:
         """
-
+        Create next child path for existing comments node
         :param session: Manages persistence operations for ORM-mapped objects
         :type session: sqlalchemy.orm.Session
-        :param parent_path:
-        :return:
+        :param parent_path: Comments node path
+        :type parent_path: str
+        :return: Path to new comment
+        :rtype: str
         """
         query = session.query(CommentsDB)
         query = self._qhelper.one_level_child_path(query, parent_path)
@@ -146,12 +148,13 @@ class DBClient:
             path = self._path_pr.next_child_path(parent_path)
         return path
 
-    def _create_first_level_path(self, session):
+    def _create_first_level_path(self, session: Session) -> str:
         """
-
+        Create path to next first level comment
         :param session: Manages persistence operations for ORM-mapped objects
         :type session: sqlalchemy.orm.Session
-        :return:
+        :return: Path to next first level comment
+        :rtype: str
         """
         query = session.query(CommentsDB)
         query = self._qhelper.first_level_path(query)
@@ -165,19 +168,32 @@ class DBClient:
         return path
 
     @session_decorator
-    def _put_comment(
-            self, session, parent_id, url, user, comment, last=True
-    ):
+    def _add_comment(
+            self,
+            session: Session,
+            parent_id: int,
+            url: str,
+            user: str,
+            comment: str,
+            last: bool = True
+    ) -> int:
         """
-
+        Add new comment to comments table in database
         :param session: Manages persistence operations for ORM-mapped objects
         :type session: sqlalchemy.orm.Session
-        :param parent_id:
-        :param url:
-        :param user:
-        :param comment:
-        :param last:
-        :return:
+        :param parent_id: ID of comment parent
+        :type parent_id: int
+        :param url: URL address where comments is adding
+        :type url: str
+        :param user: Username who is adding the comment
+        :type user: str
+        :param comment: Text of the comment
+        :type comment: str
+        :param last: Flag specifying if this comment is last on current
+                     comments level
+        :type last: bool
+        :return: Created comment ID
+        :rtype: int
         """
         user_id = self._get_id(session, UserDB, user=user)
         if parent_id:
@@ -199,31 +215,45 @@ class DBClient:
         return comment_id
 
     @session_decorator
-    def _get_comment_inheritors(self, session, comment_id):
+    def _get_comment_inheritors(
+            self, session: Session, comment_id: int
+    ) -> List:
         """
-
+        Get tree of inherited comments from specified comment
         :param session: Manages persistence operations for ORM-mapped objects
         :type session: sqlalchemy.orm.Session
-        :param comment_id:
-        :return:
+        :param comment_id: Comment ID from comments table
+        :type comment_id: int
+        :return: List of inheritors
         """
         parent = self._select(session, CommentsDB, id=comment_id).one()
         query = self._qhelper.get_base_query(session)
-        result = self._qhelper.child_path(query, parent.path).all()
-        return result
+        query = self._qhelper.child_path(query, parent.path)
+        return query.all()
 
     @session_decorator
     def _ger_url_inheritors(
-            self, session, url, first_level=True, **kwargs
-    ):
+            self,
+            session: Session,
+            url: str,
+            first_level: bool = True,
+            **kwargs: Any
+    ) -> List:
         """
-
+        Get tree of inherited comments from specified URL
         :param session: Manages persistence operations for ORM-mapped objects
         :type session: sqlalchemy.orm.Session
-        :param url:
-        :param first_level:
-        :param kwargs:
-        :return:
+        :param url: URL address
+        :type url: str
+        :param first_level: Flag to get only first level comments
+        :type first_level: bool
+        :param kwargs: Additional parameters to filter query
+            :start: (float) Start of time interval for filtering data
+            :end: (float) End of time interval for filtering data
+            :last: (bool) Get only last actual comments
+            :do_sort: (bool) Sort data by time
+        :type kwargs: Any
+        :return: List of inheritors
         """
         url_id = self._get_id(session, URLsDB, url=url)
         query = self._qhelper.get_base_query(session)
@@ -235,14 +265,22 @@ class DBClient:
         return query.all()
 
     @session_decorator
-    def _get_user_comments(self, session, user, **kwargs):
+    def _get_user_comments(
+            self, session: Session, user: str, **kwargs: Any
+    ) -> List:
         """
-
+        Get all user comments form database
         :param session: Manages persistence operations for ORM-mapped objects
         :type session: sqlalchemy.orm.Session
-        :param user:
-        :param kwargs:
-        :return:
+        :param user: Username
+        :type user: str
+        :param kwargs: Additional parameters to filter query
+            :start: (float) Start of time interval for filtering data
+            :end: (float) End of time interval for filtering data
+            :last: (bool) Get only last actual comments
+            :do_sort: (bool) Sort data by time
+        :type kwargs: Any
+        :return: List of inheritors
         """
         user_id = self._get_id(session, UserDB, user=user)
         query = self._qhelper.get_base_query(session)
@@ -250,14 +288,40 @@ class DBClient:
         query = self._qhelper.modify_data(query, **kwargs)
         return query.all()
 
-    def _get_url_comments(self, url, **kwargs):
+    def _get_url_comments(self, url: str, **kwargs: Any) -> str:
+        """
+        Create json for requested url inheritors
+        :param url: URL Address
+        :type url: str
+        :param kwargs: Additional parameters to filter query
+        :type kwargs: Any
+        :return: Dictionary with comments
+        :rtype: Dict
+        """
         result = self._ger_url_inheritors(url, **kwargs)
         comments_dict = self._path_pr.create_sorted_dict(result, self._keys)
         return comments_dict
 
     def _get_comment_tree(
-            self, url, comment_id=None, first_level=True, **kwargs
-    ):
+            self,
+            url: str,
+            comment_id: Union[None, str] = None,
+            first_level: bool = False,
+            **kwargs: Any
+    ) -> str:
+        """
+        Create json for requested url or comment inheritors
+        :param url: URL address
+        :type url: str
+        :param comment_id: Comment ID form comments table
+        :type comment_id: int
+        :param first_level: Flag to get only first level comments
+        :type first_level: bool
+        :param kwargs: Additional parameters to filter query
+        :type kwargs: Any
+        :return: Dictionary with comments
+        :rtype: Dict
+        """
         if comment_id:
             tree = self._get_comment_inheritors(comment_id)
             tree = self._path_pr.cut_paths(tree)
@@ -266,17 +330,46 @@ class DBClient:
         comments_dict = self._path_pr.create_sorted_dict(tree, self._keys)
         return comments_dict
 
-    def _get_user_history(self, user, **kwargs):
+    def _get_user_history(self, user: str, **kwargs: Any) -> str:
+        """
+        Create json for requested user comments history
+        :param user: Username
+        :type user: str
+        :param kwargs: Additional parameters to filter query
+        :type kwargs: Any
+        :return: Dictionary with comments
+        :rtype: Dict
+        """
         result = self._get_user_comments(user, **kwargs)
         comments_dict = self._path_pr.create_dict(result, self._keys)
         return comments_dict
 
-    def _save_results(self, file_path, user=None, url=None, **kwargs):
+    def _save_results(
+            self,
+            file_path: str,
+            url: Union[None, str] = None,
+            user: Union[None, str] = None,
+            **kwargs: Any
+    ) -> Dict:
+        """
+        Get user or url comments history
+        :param file_path:
+        :param user: Username
+        :type user: str
+        :param url: URL address
+        :type url: str
+        :param kwargs: Additional parameters to filter query
+        :type kwargs: Any
+        :return: Dictionary with comments
+        :rtype: Dict
+        """
         if user:
             result_dict = self._get_user_history(user, **kwargs)
-        else:
+        elif url:
             result = self._ger_url_inheritors(url, first_level=False, **kwargs)
             result_dict = self._path_pr.create_dict(result, self._keys)
+        else:
+            result_dict = {}
 
         self._save_csv(result_dict, file_path)
 
@@ -285,16 +378,15 @@ if __name__ == '__main__':
     engine = create_engine('sqlite:///:memory:')
     create_models(engine)
     db_client = DBClient(engine)
-    _ = db_client._put_comment(1, 'url_1', 'Luke', 'SkyWalker?')
-    _ = db_client._put_comment(None, 'url_3', 'Luke', 'SkyWalker?')
-    _ = db_client._put_comment(3, 'url_2', 'Dart', 'ALALA')
-    _ = db_client._put_comment(2, 'url_2', 'Dart', 'StarKiller')
-    _ = db_client._put_comment(1, 'url_1', 'Jaka', 'StarLord')
-    _ = db_client._put_comment(None, 'url_1', 'Wuki', 'AAARRRR')
+    _ = db_client._add_comment(1, 'url_1', 'Luke', 'SkyWalker?')
+    _ = db_client._add_comment(None, 'url_3', 'Luke', 'SkyWalker?')
+    _ = db_client._add_comment(3, 'url_2', 'Dart', 'ALALA')
+    _ = db_client._add_comment(2, 'url_2', 'Dart', 'StarKiller')
+    _ = db_client._add_comment(1, 'url_1', 'Jaka', 'StarLord')
+    _ = db_client._add_comment(None, 'url_1', 'Wuki', 'AAARRRR')
 
     comments = db_client._get_url_comments('url_1')
-    comments_dict = db_client._get_comment_tree(url='url_1', comment_id=1,
-                                                first_level=False)
+    comments_dict = db_client._get_comment_tree(url='url_1', comment_id=1)
     user_comments = db_client._get_user_history(user='Luke', do_sort=True)
 
     curr_path = os.getcwd()
@@ -305,14 +397,16 @@ if __name__ == '__main__':
                             do_sort=True, end=600)
 
     print(comments_dict)
+    print(comments)
+    print(user_comments)
 
-    print("User comments")
-    for comment in user_comments:
-        print(user_comments[comment])
-
-    print("URL first level")
-    for comment in comments:
-        print(comments[comment])
-    print("Comments tree")
+    # print("User comments")
+    # for comment in user_comments:
+    #     print(user_comments[comment])
+    #
+    # print("URL first level")
+    # for comment in comments:
+    #     print(comments[comment])
+    # print("Comments tree")
 
     print_tables(engine)
