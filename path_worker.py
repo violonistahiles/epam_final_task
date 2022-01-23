@@ -1,5 +1,11 @@
 class PathProcessor:
 
+    def __init__(self):
+        self.filters = {'child': r'\..*',
+                        'child_dot': r'\..*\.',
+                        'first_level': r'(.*\..*)',
+                        }
+
     @staticmethod
     def decode(path):
         pass

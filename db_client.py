@@ -1,5 +1,8 @@
+import csv
 import datetime
 import json
+import os
+from typing import List
 
 from sqlalchemy import and_, create_engine, not_
 from sqlalchemy.engine import Engine
@@ -15,13 +18,12 @@ def session_decorator(func):
     """Decorator to perform database session"""
     def wrapper(self, *args, **kwargs):
         with Session(self._engine) as session:
-            result = func(self, session, *args, **kwargs)
+            try:
+                result = func(self, session, *args, **kwargs)
+            except NoResultFound:
+                return {}
         return result
     return wrapper
-
-
-def comments_generator(comments):
-    pass
 
 
 class DBClient:
@@ -29,15 +31,30 @@ class DBClient:
     def __init__(self, engine: Engine):
         self._engine = engine
         self.path_pr = PathProcessor()
-        self.filters = {'child': r'\..*',
-                        'child_dot': r'\..*\.',
-                        'first_level': r'(.*\..*)',
-                        }
+        self.keys = ['comment_id', 'user', 'comment', 'date']
 
     @staticmethod
     def save_json(data_dict, data_path):
         with open(data_path, 'w') as f:
             json.dump(data_dict, f)
+
+    @staticmethod
+    def _save_results(data: List, file_path, first: bool = False):
+        """
+        Save single data row to report.csv
+        :param data: List with values for single line in .csv file
+        :type data: List
+        :param first: Flag to save rewrite file and fill header
+        :type first: bool
+        """
+        if first:
+            with open(file_path, 'w', newline='') as fi:
+                report = csv.writer(fi)
+                report.writerow(data)
+        else:
+            with open(file_path, 'a', newline='') as fi:
+                report = csv.writer(fi)
+                report.writerow(data)
 
     @staticmethod
     def _select(session, table, **kwargs):
@@ -58,47 +75,65 @@ class DBClient:
 
         return sample_id.id
 
-    def _child_path(self, session, path, **kwargs):
-        path_filter = path + self.filters['child']
-        path_filter_dot = path + self.filters['child_dot']
+    @staticmethod
+    def _filter_by_actuality(query, last=True):
+        query = query.filter_by(last=last)
+        return query
 
+    @staticmethod
+    def _filter_by_time(query, start=None, end=None):
+        start = start if start else 0
+        end = end if end else datetime.datetime.now().timestamp()
+        query = query.filter(and_(CommentsDB.date > start,
+                                  CommentsDB.date < end))
+        return query
+
+    @staticmethod
+    def _check_query(query):
         try:
-            last_sample = session.query(CommentsDB).filter(and_(
-                CommentsDB.path.regexp_match(path_filter),
-                not_(CommentsDB.path.regexp_match(path_filter_dot))
-            )).filter_by(**kwargs).one()
+            result = query.one()
         except NoResultFound:
-            last_sample = None
+            return
+        return result
 
-        return last_sample
+    def _child_path(self, session, path, last=True):
+        path_filter = path + self.path_pr.filters['child']
+        path_filter_dot = path + self.path_pr.filters['child_dot']
 
-    def _first_level_paths(self, session, **kwargs):
-        try:
-            last_sample = session.query(CommentsDB).filter(not_(
-                CommentsDB.path.regexp_match(self.filters['first_level'])
-            )).filter_by(**kwargs).one()
-        except NoResultFound:
-            last_sample = None
+        query = session.query(CommentsDB).filter(and_(
+            CommentsDB.path.regexp_match(path_filter),
+            not_(CommentsDB.path.regexp_match(path_filter_dot))))
+        query = self._filter_by_actuality(query, last=last)
 
-        return last_sample
+        return query
 
-    def _create_child_path(self, session, parent_id):
-        parent = self._select(session, CommentsDB, id=parent_id).one()
-        last_child = self._child_path(session, parent.path, last=True)
+    def _first_level_paths(self, session, last=True):
+        query = session.query(CommentsDB).filter(not_(
+            CommentsDB.path.regexp_match(
+                self.path_pr.filters['first_level'])))
+        query = self._filter_by_actuality(query, last=last)
+
+        return query
+
+    def _create_child_path(self, session, parent_path):
+        last_child = self._child_path(session, parent_path, last=True)
+        last_child = self._check_query(last_child)
         if last_child:
-            path = self.path_pr.next_child_path(last_child.path,
-                                                first=False)
+            path = self.path_pr.next_child_path(last_child.path, first=False)
+            last_child.last = False
         else:
-            path = self.path_pr.next_child_path(parent.path)
-        return path, last_child, parent.url_id
+            path = self.path_pr.next_child_path(parent_path)
+        return path
 
     def _create_first_level_path(self, session):
         last_comment = self._first_level_paths(session, last=True)
+        last_comment = self._check_query(last_comment)
         if last_comment:
             path = self.path_pr.next_path(last_comment.path, first=False)
+            last_comment.last = False
         else:
             path = self.path_pr.next_path()
-        return path, last_comment
+        return path
 
     @session_decorator
     def _put_comment(
@@ -106,10 +141,11 @@ class DBClient:
     ):
         user_id = self._get_id(session, UserDB, user=user)
         if parent_id:
-            path, last_comment, url_id = self._create_child_path(session,
-                                                                 parent_id)
+            parent = self._select(session, CommentsDB, id=parent_id).one()
+            path = self._create_child_path(session, parent.path)
+            url_id = parent.url_id
         else:
-            path, last_comment = self._create_first_level_path(session)
+            path, = self._create_first_level_path(session)
             url_id = self._get_id(session, URLsDB, url=url)
         current_time = datetime.datetime.now().timestamp()
         kwargs = {'path': path,
@@ -117,88 +153,68 @@ class DBClient:
                   'url_id': url_id,
                   'comment': comment,
                   'date': current_time,
-                  'last': True}
+                  'last': last}
 
-        comment = CommentsDB(**kwargs)
-        session.add(comment)
-        if last_comment:
-            last_comment.last = False
-        session.commit()
+        comment_id = self._get_id(session, CommentsDB, **kwargs)
+        return comment_id
 
-        return self._get_id(session, CommentsDB, path=path)
-
-    @session_decorator
-    def _get_url_comments(self, session, url):
-        url_id = self._get_id(session, URLsDB, url=url)
+    @staticmethod
+    def _get_base_query(session):
         query = session.query(
             CommentsDB.path,
             CommentsDB.id,
             UserDB.user,
             CommentsDB.comment,
             CommentsDB.date
-        )
-        join_query = query.join(UserDB)
-        result = join_query.filter(and_(CommentsDB.url_id == url_id,
-                                        not_(
-                                            CommentsDB.path.regexp_match(
-                                                self.filters['first_level'])
-                                        ))).all()
-        keys = ['comment_id', 'user', 'comment', 'date']
-        comments_dict = self.path_pr.create_sorted_dict(result, keys)
-        return comments_dict
+        ).join(UserDB)
+        return query
 
+    @session_decorator
     def _get_comment_inheritors(self, session, comment_id):
         parent = self._select(session, CommentsDB, id=comment_id).one()
-        query = session.query(
-            CommentsDB.path,
-            CommentsDB.id,
-            UserDB.user,
-            CommentsDB.comment,
-            CommentsDB.date
-        )
-        join_query = query.join(UserDB)
-        return join_query.filter(CommentsDB.path.startswith(parent.path)).all()
-
-    def _ger_url_inheritors(self, session, url):
-        url_id = self._get_id(session, URLsDB, url=url)
-        query = session.query(
-            CommentsDB.path,
-            CommentsDB.id,
-            UserDB.user,
-            CommentsDB.comment,
-            CommentsDB.date
-        )
-        join_query = query.join(UserDB)
-        return join_query.filter(CommentsDB.url_id == url_id).all()
+        query = self._get_base_query(session)
+        result = query.filter(CommentsDB.path.startswith(parent.path)).all()
+        return result
 
     @session_decorator
-    def _get_inheritors(self, session, url, comment_id=None):
-        if comment_id:
-            tree = self._get_comment_inheritors(session, comment_id)
-        else:
-            tree = self._ger_url_inheritors(session, url)
+    def _ger_url_inheritors(
+            self, session, url, first_level=True, start=None, end=None
+    ):
+        url_id = self._get_id(session, URLsDB, url=url)
+        query = self._get_base_query(session)
+        query = query.filter(CommentsDB.url_id == url_id)
+        if first_level:
+            query = query.filter(not_(CommentsDB.path.regexp_match(
+                self.path_pr.filters['first_level'])))
+        if start or end:
+            query = self._filter_by_time(query, start, end)
 
-        keys = ['comment_id', 'user', 'comment', 'date']
-        comments_dict = self.path_pr.create_sorted_dict(tree, keys)
+        return query.all()
+
+    @session_decorator
+    def _get_user_comments(self, session, user):
+        user_id = self._get_id(session, UserDB, user=user)
+        query = self._get_base_query(session)
+        query = query.filter(CommentsDB.user_id == user_id)
+        result = query.order_by(CommentsDB.date).all()
+        return result
+
+    def _get_url_comments(self, url, **kwargs):
+        result = self._ger_url_inheritors(url, **kwargs)
+        comments_dict = self.path_pr.create_sorted_dict(result, self.keys)
         return comments_dict
 
-    @session_decorator
-    def _get_user_history(self, session, user):
-        user_id = self._get_id(session, UserDB, user=user)
-        query = session.query(
-            CommentsDB.path,
-            CommentsDB.id,
-            UserDB.user,
-            CommentsDB.comment,
-            CommentsDB.date
-        )
-        join_query = query.join(UserDB)
-        join_query = join_query.filter(CommentsDB.user_id == user_id)
-        result = join_query.order_by(CommentsDB.date).all()
+    def _get_inheritors(self, url, comment_id=None):
+        if comment_id:
+            tree = self._get_comment_inheritors(comment_id)
+        else:
+            tree = self._ger_url_inheritors(url, first_level=False)
+        comments_dict = self.path_pr.create_sorted_dict(tree, self.keys)
+        return comments_dict
 
-        keys = ['comment_id', 'user', 'comment', 'date']
-        comments_dict = self.path_pr.create_dict(result, keys)
-
+    def _get_user_history(self, user):
+        result = self._get_user_comments(user)
+        comments_dict = self.path_pr.create_dict(result, self.keys)
         return comments_dict
 
 
@@ -216,6 +232,15 @@ if __name__ == '__main__':
     comments = db_client._get_url_comments('url_1')
     comments_dict = db_client._get_inheritors(url='url_1', comment_id=None)
     user_comments = db_client._get_user_history(user='Luke')
+
+    curr_path = os.getcwd()
+    results_path = os.path.join(curr_path, 'build')
+
+    db_client.save_json(comments, os.path.join(results_path, 'url.json'))
+    db_client.save_json(comments_dict, os.path.join(results_path, 'inh.json'))
+    db_client.save_json(user_comments, os.path.join(results_path, 'user.json'))
+
+    print(comments_dict)
 
     print("User comments")
     for comment in user_comments:
