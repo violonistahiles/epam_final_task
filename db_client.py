@@ -2,15 +2,16 @@ import csv
 import datetime
 import json
 import os
-from typing import Any, Callable, Dict, Union
+from typing import Any, Callable, Dict
 
-from sqlalchemy import and_, create_engine, not_
+from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Query, Session
 
 from db_table import Base, CommentsDB, URLsDB, UserDB
 from path_worker import PathProcessor
+from query_helper import QueryHelper
 from tester import create_models, print_tables
 
 
@@ -35,142 +36,6 @@ def session_decorator(func: Callable) -> Callable:
         return result
 
     return wrapper
-
-
-class QueryHelper:
-    """Service class to handle basic operations with database query"""
-    def __init__(self, filters):
-        self._path_filters = filters
-
-    @staticmethod
-    def _filter_by_time(
-            query: Query,
-            start: Union[bool, float] = None,
-            end: Union[bool, float] = None
-    ) -> Query:
-        """
-        Filter data by time interval
-        :param query: Query to database
-        :type query: sqlalchemy.orm.Query
-        :param start: Optional, if specified: start of time interval
-        :type start: Union[bool, float]
-        :param end: Optional, if specified: end of time interval
-        :type end: Union[bool, float]
-        :return: Modified query
-        :rtype: sqlalchemy.orm.Query
-        """
-
-        start = start if start else 0
-        end = end if end else datetime.datetime.now().timestamp()
-        query = query.filter(and_(CommentsDB.date > start,
-                                  CommentsDB.date < end))
-        return query
-
-    @staticmethod
-    def _parse_parameter(key: str, **kwargs: Any) -> Union[Any, None]:
-        """
-        Parse value from keyword arguments
-        :param key: Key which value to parse from kwargs
-        :type key: str
-        :param kwargs: Keyword arguments
-        :type kwargs: Any
-        :return: Parsed value if it is exists, else None
-        :rtype: Union[Any, None]
-        """
-        return kwargs[key] if key in kwargs else None
-
-    @staticmethod
-    def get_base_query(session: Session) -> Query:
-        """
-        Create basic query to database
-        :param session: Manages persistence operations for ORM-mapped objects
-        :type session: sqlalchemy.orm.Session
-        :return: Query
-        :rtype: sqlalchemy.orm.Query
-        """
-        query = session.query(
-            CommentsDB.path,
-            CommentsDB.id,
-            UserDB.user,
-            CommentsDB.comment,
-            CommentsDB.date
-        ).join(UserDB)
-        return query
-
-    def child_path(
-            self, query, path: str) -> Query:
-        """
-        Filter query for nested
-        :param query:
-        :param path:
-        :return:
-        """
-        path_filter = path + '.'
-        query = query.filter(CommentsDB.path.startswith(path_filter))
-        return query
-
-    def one_level_child_path(
-            self, query, path: str) -> Query:
-        """
-
-        :param query:
-        :param path:
-        :return:
-        """
-        path_filter = path + self._path_filters['inherits_one_level']
-        query = self.child_path(query, path)
-        query = query.filter(not_(CommentsDB.path.regexp_match(path_filter)))
-        return query
-
-    def first_level_path(self, query: Query) -> Query:
-        """
-
-        :param query:
-        :return:
-        """
-        path_filter = self._path_filters['first_level']
-        query = query.filter(not_(CommentsDB.path.regexp_match(path_filter)))
-
-        return query
-
-    @staticmethod
-    def check_query(query: Query) -> Union[Query, None]:
-        """
-        Check if query return nothing
-        :param query: Query to database
-        :type query: sqlalchemy.orm.Query
-        :return: Query if result is not empty, else None
-        :rtype: Union[sqlalchemy.orm.Query, None]
-        """
-        try:
-            result = query.one()
-        except NoResultFound:
-            return
-        return result
-
-    def modify_data(self, query: Query, **kwargs: Any) -> Query:
-        """
-        Apply selected filters for query
-        :param query: Query to database
-        :type query: sqlalchemy.orm.Query
-        :param kwargs: Keyword arguments containing filter parameters
-        :type kwargs: Any
-        :return: Modified query
-        :rtype: sqlalchemy.orm.Query
-        """
-        last = self._parse_parameter('last', **kwargs)
-        do_sort = self._parse_parameter('do_sort', **kwargs)
-        start = self._parse_parameter('start', **kwargs)
-        end = self._parse_parameter('end', **kwargs)
-
-        if last:
-            query = query.filter_by(last=True)
-        if start or end:
-            query = self._filter_by_time(query, start=start, end=end)
-        if do_sort:
-            query = query.order_by(CommentsDB.date)
-
-        return query
 
 
 class DBClient:
