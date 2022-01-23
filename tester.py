@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
@@ -18,27 +16,27 @@ def create_models(engine):
 
     comment_1 = CommentsDB(path='1', user_id=1, url_id=1,
                            comment='first comment',
-                           date=datetime.strptime('21:01:10', '%y:%m:%d'),
+                           date=150.0,
                            last=False)
 
     comment_2 = CommentsDB(path='1.1', user_id=1, url_id=1,
                            comment='1.1 comment',
-                           date=datetime.strptime('21:01:10', '%y:%m:%d'),
+                           date=15.0,
                            last=False)
 
     comment_3 = CommentsDB(path='1.2', user_id=2, url_id=1,
                            comment='1.2 comment',
-                           date=datetime.strptime('21:01:10', '%y:%m:%d'),
+                           date=145.0,
                            last=True)
 
     comment_4 = CommentsDB(path='2', user_id=2, url_id=2,
                            comment='first comment',
-                           date=datetime.strptime('21:01:10', '%y:%m:%d'),
+                           date=150.0,
                            last=True)
 
     comment_5 = CommentsDB(path='1.1.1', user_id=2, url_id=1,
                            comment='1.1.1 comment',
-                           date=datetime.strptime('21:01:10', '%y:%m:%d'),
+                           date=150.0,
                            last=True)
 
     with Session(engine) as session:

@@ -1,7 +1,12 @@
-from collections import defaultdict
-
-
 class PathProcessor:
+
+    @staticmethod
+    def decode(path):
+        pass
+
+    @staticmethod
+    def encode(path):
+        pass
 
     @staticmethod
     def next_child_path(path, first=True):
@@ -17,21 +22,36 @@ class PathProcessor:
         return path if first else str(int(path) + 1)
 
     @staticmethod
-    def create_dict(comments):
-        keys = ['user', 'comment', 'date']
-        comments_result = defaultdict(dict)
+    def create_sorted_dict(comments, keys):
+        result = dict()
         sorted_comments = sorted(comments,
                                  key=lambda x: (len(x[0].split('.')), x[0]))
+
+        swap_dict = {}
+        for ind, comment in enumerate(sorted_comments, start=1):
+            if len(comment[0].split('.')) == 1:
+                swap_dict.update({comment[0]: str(ind)})
+            else:
+                break
 
         for comment in sorted_comments:
             info = {key: value for key, value in zip(keys, comment[1:])}
             paths = comment[0].split('.')
             if len(paths) == 1:
-                comments_result[paths[0]] = {**info, 'comments': dict()}
+                result[swap_dict[paths[0]]] = {**info, 'comments': dict()}
             else:
-                tmp_dict = comments_result[paths[0]]['comments']
+                tmp_dict = result[swap_dict[paths[0]]]['comments']
                 for path in paths[1:-1]:
                     tmp_dict = tmp_dict[path]['comments']
                 tmp_dict.update({paths[-1]: {**info, 'comments': dict()}})
 
-        return comments_result
+        return result
+
+    @staticmethod
+    def create_dict(comments, keys):
+        result = dict()
+        for ind, comment in enumerate(comments, start=1):
+            info = {key: value for key, value in zip(keys, comment[1:])}
+            result.update({str(ind): info})
+
+        return result

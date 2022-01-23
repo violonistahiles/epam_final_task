@@ -1,4 +1,4 @@
-from sqlalchemy import BOOLEAN, TIMESTAMP, Column, ForeignKey, Integer, String
+from sqlalchemy import BOOLEAN, Column, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -34,7 +34,7 @@ class CommentsDB(Base):
     user_id = Column(Integer, ForeignKey('users.id'))
     url_id = Column(Integer, ForeignKey('urls.id'))
     comment = Column(String)
-    date = Column(TIMESTAMP)
+    date = Column(Float)
     last = Column(BOOLEAN)
 
     def __repr__(self):

@@ -1,4 +1,5 @@
 import datetime
+import json
 
 from sqlalchemy import and_, create_engine, not_
 from sqlalchemy.engine import Engine
@@ -28,10 +29,15 @@ class DBClient:
     def __init__(self, engine: Engine):
         self._engine = engine
         self.path_pr = PathProcessor()
-        self.filters = {'child': r'\.\d+',
-                        'child_dot': r'\.\d+\.',
+        self.filters = {'child': r'\..*',
+                        'child_dot': r'\..*\.',
                         'first_level': r'(.*\..*)',
                         }
+
+    @staticmethod
+    def save_json(data_dict, data_path):
+        with open(data_path, 'w') as f:
+            json.dump(data_dict, f)
 
     @staticmethod
     def _select(session, table, **kwargs):
@@ -105,7 +111,7 @@ class DBClient:
         else:
             path, last_comment = self._create_first_level_path(session)
             url_id = self._get_id(session, URLsDB, url=url)
-        current_time = datetime.datetime.now()
+        current_time = datetime.datetime.now().timestamp()
         kwargs = {'path': path,
                   'user_id': user_id,
                   'url_id': url_id,
@@ -123,24 +129,29 @@ class DBClient:
 
     @session_decorator
     def _get_url_comments(self, session, url):
-        try:
-            url_instance = self._select(session, URLsDB, url=url).one()
-        except NoResultFound:
-            return
-
+        url_id = self._get_id(session, URLsDB, url=url)
         query = session.query(
             CommentsDB.path,
+            CommentsDB.id,
             UserDB.user,
             CommentsDB.comment,
             CommentsDB.date
         )
         join_query = query.join(UserDB)
-        return join_query.filter(CommentsDB.url_id == url_instance.id).all()
+        result = join_query.filter(and_(CommentsDB.url_id == url_id,
+                                        not_(
+                                            CommentsDB.path.regexp_match(
+                                                self.filters['first_level'])
+                                        ))).all()
+        keys = ['comment_id', 'user', 'comment', 'date']
+        comments_dict = self.path_pr.create_sorted_dict(result, keys)
+        return comments_dict
 
     def _get_comment_inheritors(self, session, comment_id):
         parent = self._select(session, CommentsDB, id=comment_id).one()
         query = session.query(
             CommentsDB.path,
+            CommentsDB.id,
             UserDB.user,
             CommentsDB.comment,
             CommentsDB.date
@@ -152,6 +163,7 @@ class DBClient:
         url_id = self._get_id(session, URLsDB, url=url)
         query = session.query(
             CommentsDB.path,
+            CommentsDB.id,
             UserDB.user,
             CommentsDB.comment,
             CommentsDB.date
@@ -160,15 +172,33 @@ class DBClient:
         return join_query.filter(CommentsDB.url_id == url_id).all()
 
     @session_decorator
-    def _get_inheritors(self, session, comment_id=None, url=None):
+    def _get_inheritors(self, session, url, comment_id=None):
         if comment_id:
             tree = self._get_comment_inheritors(session, comment_id)
-        elif url:
-            tree = self._ger_url_inheritors(session, url)
         else:
-            return None
+            tree = self._ger_url_inheritors(session, url)
 
-        comments_dict = self.path_pr.create_dict(tree)
+        keys = ['comment_id', 'user', 'comment', 'date']
+        comments_dict = self.path_pr.create_sorted_dict(tree, keys)
+        return comments_dict
+
+    @session_decorator
+    def _get_user_history(self, session, user):
+        user_id = self._get_id(session, UserDB, user=user)
+        query = session.query(
+            CommentsDB.path,
+            CommentsDB.id,
+            UserDB.user,
+            CommentsDB.comment,
+            CommentsDB.date
+        )
+        join_query = query.join(UserDB)
+        join_query = join_query.filter(CommentsDB.user_id == user_id)
+        result = join_query.order_by(CommentsDB.date).all()
+
+        keys = ['comment_id', 'user', 'comment', 'date']
+        comments_dict = self.path_pr.create_dict(result, keys)
+
         return comments_dict
 
 
@@ -181,14 +211,21 @@ if __name__ == '__main__':
     _ = db_client._put_comment(3, 'url_2', 'Dart', 'ALALA')
     _ = db_client._put_comment(2, 'url_2', 'Dart', 'StarKiller')
     _ = db_client._put_comment(1, 'url_1', 'Jaka', 'StarLord')
+    _ = db_client._put_comment(None, 'url_1', 'Wuki', 'AAARRRR')
 
     comments = db_client._get_url_comments('url_1')
-    comments_dict = db_client._get_inheritors(comment_id=1, url='')
+    comments_dict = db_client._get_inheritors(url='url_1', comment_id=None)
+    user_comments = db_client._get_user_history(user='Luke')
+
+    print("User comments")
+    for comment in user_comments:
+        print(user_comments[comment])
 
     print("URL first level")
     for comment in comments:
-        print(comment)
+        print(comments[comment])
 
-    print(comments_dict)
+    print("Comments tree")
+    print(datetime.datetime.fromtimestamp(comments_dict['1']['date']))
 
     print_tables(engine)
