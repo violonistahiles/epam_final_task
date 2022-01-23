@@ -2,22 +2,32 @@ import csv
 import datetime
 import json
 import os
-from typing import List
+from typing import Any, Callable, Dict, Union
 
 from sqlalchemy import and_, create_engine, not_
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import NoResultFound
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Query, Session
 
 from db_table import CommentsDB, URLsDB, UserDB
 from path_worker import PathProcessor
 from tester import create_models, print_tables
 
 
-def session_decorator(func):
-    """Decorator to perform database session"""
+def session_decorator(func: Callable) -> Callable:
+    """
+    Decorator to perform database session and close it after transaction
 
+    :param func: Function with database transactions
+    :type func: Callable
+    :return: Function which decorate initial function with ORM Session
+    :rtype: Callable
+    """
     def wrapper(self, *args, **kwargs):
+        """
+        Perform initial function under ORM Session and return empty dict
+        if transaction cant get result
+        """
         with Session(self._engine) as session:
             try:
                 result = func(self, session, *args, **kwargs)
@@ -28,35 +38,132 @@ def session_decorator(func):
     return wrapper
 
 
+class QueryHelper:
+    """Service class to handle basic operations with database query"""
+    @staticmethod
+    def _filter_by_time(
+            query: Query,
+            start: Union[bool, float] = None,
+            end: Union[bool, float] = None
+    ) -> Query:
+        """
+        Filter data by time interval
+
+        :param query: Query to database
+        :type query: Query
+        :param start: Optional, if specified: start of time interval
+        :type start: Union[bool, float]
+        :param end: Optional, if specified: end of time interval
+        :type end: Union[bool, float]
+        :return: Modified query
+        :rtype: Query
+        """
+
+        start = start if start else 0
+        end = end if end else datetime.datetime.now().timestamp()
+        query = query.filter(and_(CommentsDB.date > start,
+                                  CommentsDB.date < end))
+        return query
+
+    @staticmethod
+    def _parse_parameter(key: str, **kwargs: Any) -> Union[Any, None]:
+        """
+        Parse value from keyword arguments
+        :param key: Key which value to parse from kwargs
+        :type key: str
+        :param kwargs: Keyword arguments
+        :type kwargs: Any
+        :return: Parsed value if it is exists, else None
+        :rtype: Union[Any, None]
+        """
+        return kwargs[key] if key in kwargs else None
+
+    @staticmethod
+    def get_base_query(session: Session) -> Query:
+        """
+        Create basic query to database
+        :param session: Manages persistence operations for ORM-mapped objects
+        :type session: Session
+        :return: Query
+        :rtype: Query
+        """
+        query = session.query(
+            CommentsDB.path,
+            CommentsDB.id,
+            UserDB.user,
+            CommentsDB.comment,
+            CommentsDB.date
+        ).join(UserDB)
+        return query
+
+    @staticmethod
+    def check_query(query: Query) -> Union[Query, None]:
+        """
+        Check if query return nothing
+        :param query: Query to database
+        :type query: Query
+        :return: Query if result is not empty, else None
+        :rtype: Union[Query, None]
+        """
+        try:
+            result = query.one()
+        except NoResultFound:
+            return
+        return result
+
+    def modify_data(self, query, **kwargs):
+        """
+        Apply selected filters for query
+        :param query: Query to database
+        :type query: Query
+        :param kwargs: Keyword arguments containing filter parameters
+        :type kwargs: Any
+        :return: Modified query
+        :rtype: Query
+        """
+        last = self._parse_parameter('last', **kwargs)
+        do_sort = self._parse_parameter('do_sort', **kwargs)
+        start = self._parse_parameter('start', **kwargs)
+        end = self._parse_parameter('end', **kwargs)
+
+        if last:
+            query = query.filter_by(last=True)
+        if start or end:
+            query = self._filter_by_time(query, start=start, end=end)
+        if do_sort:
+            query = query.order_by(CommentsDB.date)
+
+        return query
+
+
 class DBClient:
 
     def __init__(self, engine: Engine):
         self._engine = engine
         self.path_pr = PathProcessor()
+        self._qhelper = QueryHelper()
         self.keys = ['comment_id', 'user', 'comment', 'date']
 
     @staticmethod
-    def save_json(data_dict, data_path):
+    def _save_json(data_dict, data_path):
         with open(data_path, 'w') as f:
             json.dump(data_dict, f)
 
-    @staticmethod
-    def _save_csv_line(data: List, file_path, first: bool = False):
+    def _save_csv(self, data: Dict, file_path):
         """
         Save single data row to report.csv
-        :param data: List with values for single line in .csv file
-        :type data: List
-        :param first: Flag to save rewrite file and fill header
-        :type first: bool
+        :param data: Dictionary with values for single line in .csv file
+        :type data: Dict
+        :param file_path: path to .csv file
+        :type file_path: str
         """
-        if first:
-            with open(file_path, 'w', newline='') as fi:
-                report = csv.writer(fi)
-                report.writerow(data)
-        else:
-            with open(file_path, 'a', newline='') as fi:
-                report = csv.writer(fi)
-                report.writerow(data)
+        with open(file_path, 'w', newline='') as fi:
+            report = csv.writer(fi)
+            report.writerow(self.keys)
+            for ind in data:
+                data_list = [data[ind][key] for key in self.keys]
+                data_list[-1] = datetime.datetime.fromtimestamp(data_list[-1])
+                report.writerow(data_list)
 
     @staticmethod
     def _select(session, table, **kwargs):
@@ -74,43 +181,7 @@ class DBClient:
         except NoResultFound:
             self._add_to_bd(session, table, **kwargs)
             sample_id = self._select(session, table, **kwargs).one()
-
         return sample_id.id
-
-    @staticmethod
-    def _filter_by_actuality(query, last=True):
-        query = query.filter_by(last=last)
-        return query
-
-    @staticmethod
-    def _filter_by_time(query, start=None, end=None):
-        start = start if start else 0
-        end = end if end else datetime.datetime.now().timestamp()
-        query = query.filter(and_(CommentsDB.date > start,
-                                  CommentsDB.date < end))
-        return query
-
-    @staticmethod
-    def _sort_by_time(query, do_sort=False):
-        return query.order_by(CommentsDB.date) if do_sort else query
-
-    def _modify_data(self, query, **kwargs):
-        if 'last' in kwargs:
-            query = self._filter_by_actuality(query, last=kwargs['last'])
-        if 'do_sort' in kwargs:
-            query = self._sort_by_time(query, do_sort=kwargs['do_sort'])
-        if 'start' in kwargs or 'end' in kwargs:
-            query = self._filter_by_time(query, start=kwargs['start'],
-                                         end=kwargs['end'])
-        return query
-
-    @staticmethod
-    def _check_query(query):
-        try:
-            result = query.one()
-        except NoResultFound:
-            return
-        return result
 
     def _child_path(self, session, path, **kwargs):
         path_filter = path + self.path_pr.filters['child']
@@ -119,7 +190,7 @@ class DBClient:
         query = session.query(CommentsDB).filter(and_(
             CommentsDB.path.regexp_match(path_filter),
             not_(CommentsDB.path.regexp_match(path_filter_dot))))
-        query = self._modify_data(query, **kwargs)
+        query = self._qhelper.modify_data(query, **kwargs)
 
         return query
 
@@ -127,13 +198,13 @@ class DBClient:
         query = session.query(CommentsDB).filter(not_(
             CommentsDB.path.regexp_match(
                 self.path_pr.filters['first_level'])))
-        query = self._modify_data(query, **kwargs)
+        query = self._qhelper.modify_data(query, **kwargs)
 
         return query
 
     def _create_child_path(self, session, parent_path):
         last_child = self._child_path(session, parent_path, last=True)
-        last_child = self._check_query(last_child)
+        last_child = self._qhelper.check_query(last_child)
         if last_child:
             path = self.path_pr.next_child_path(last_child.path, first=False)
             last_child.last = False
@@ -143,7 +214,7 @@ class DBClient:
 
     def _create_first_level_path(self, session):
         last_comment = self._first_level_paths(session, last=True)
-        last_comment = self._check_query(last_comment)
+        last_comment = self._qhelper.check_query(last_comment)
         if last_comment:
             path = self.path_pr.next_path(last_comment.path, first=False)
             last_comment.last = False
@@ -174,21 +245,10 @@ class DBClient:
         comment_id = self._get_id(session, CommentsDB, **kwargs)
         return comment_id
 
-    @staticmethod
-    def _get_base_query(session):
-        query = session.query(
-            CommentsDB.path,
-            CommentsDB.id,
-            UserDB.user,
-            CommentsDB.comment,
-            CommentsDB.date
-        ).join(UserDB)
-        return query
-
     @session_decorator
     def _get_comment_inheritors(self, session, comment_id):
         parent = self._select(session, CommentsDB, id=comment_id).one()
-        query = self._get_base_query(session)
+        query = self._qhelper.get_base_query(session)
         result = query.filter(CommentsDB.path.startswith(parent.path)).all()
         return result
 
@@ -197,9 +257,9 @@ class DBClient:
             self, session, url, first_level=True, **kwargs
     ):
         url_id = self._get_id(session, URLsDB, url=url)
-        query = self._get_base_query(session)
+        query = self._qhelper.get_base_query(session)
         query = query.filter(CommentsDB.url_id == url_id)
-        query = self._modify_data(query, **kwargs)
+        query = self._qhelper.modify_data(query, **kwargs)
         if first_level:
             query = query.filter(not_(CommentsDB.path.regexp_match(
                 self.path_pr.filters['first_level'])))
@@ -209,9 +269,9 @@ class DBClient:
     @session_decorator
     def _get_user_comments(self, session, user, **kwargs):
         user_id = self._get_id(session, UserDB, user=user)
-        query = self._get_base_query(session)
+        query = self._qhelper.get_base_query(session)
         query = query.filter(CommentsDB.user_id == user_id)
-        query = self._modify_data(query, **kwargs)
+        query = self._qhelper.modify_data(query, **kwargs)
         return query.all()
 
     def _get_url_comments(self, url, **kwargs):
@@ -241,12 +301,7 @@ class DBClient:
             result = self._ger_url_inheritors(url, first_level=False, **kwargs)
             result_dict = self.path_pr.create_dict(result, self.keys)
 
-        self._save_csv_line(['Comment ID', 'User', 'Comment', 'Date'],
-                            file_path, first=True)
-
-        for ind in result_dict:
-            data_list = [result_dict[ind][key] for key in self.keys]
-            self._save_csv_line(data_list, file_path, first=False)
+        self._save_csv(result_dict, file_path)
 
 
 if __name__ == '__main__':
@@ -268,12 +323,9 @@ if __name__ == '__main__':
     curr_path = os.getcwd()
     results_path = os.path.join(curr_path, 'build')
 
-    db_client.save_json(comments, os.path.join(results_path, 'url.json'))
-    db_client.save_json(comments_dict, os.path.join(results_path, 'inh.json'))
-    db_client.save_json(user_comments, os.path.join(results_path, 'user.json'))
-
     csv_path = os.path.join(results_path, 'result.csv')
-    db_client._save_results(csv_path, user='', url='url_1', do_sort=True)
+    db_client._save_results(csv_path, user='', url='url_1',
+                            do_sort=True, end=600)
 
     print(comments_dict)
 
@@ -284,7 +336,6 @@ if __name__ == '__main__':
     print("URL first level")
     for comment in comments:
         print(comments[comment])
-
     print("Comments tree")
     print(datetime.datetime.fromtimestamp(comments_dict['1']['date']))
 
