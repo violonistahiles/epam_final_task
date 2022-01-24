@@ -2,7 +2,7 @@ import csv
 import datetime
 import json
 import os
-from typing import Dict
+from typing import Callable, Dict
 
 from sqlalchemy import create_engine
 
@@ -23,6 +23,28 @@ class RequestData:
         self.attrs = attrs
 
 
+def parser_decorator(func: Callable) -> Callable:
+    """
+    Decorator to perform database session and close it after transaction
+    :param func: Function with database transactions
+    :type func: Callable
+    :return: Function which decorate initial function with ORM Session
+    :rtype: Callable
+    """
+    def wrapper(self, *args, **kwargs):
+        """
+        Perform initial function under ORM Session and return empty dict
+        if transaction cant get result
+        """
+        try:
+            result = func(self, *args, **kwargs)
+        except (KeyError, ValueError):
+            return RequestData('Wrong command', '')
+        return result
+
+    return wrapper
+
+
 class APIClient:
     """Class to process requests"""
     def __init__(self, engine):
@@ -38,6 +60,7 @@ class APIClient:
 
         self._db_client = DBClient(engine)
 
+    @parser_decorator
     def _parse_request(self, request: str) -> RequestData:
         """
         Parse request data
@@ -115,9 +138,14 @@ class APIClient:
             report_path = self._save_csv(data_dict, report_dir)
             result = report_path
         else:
-            result = {}
+            result = {'Response': 'Wrong command'}
 
         return json.dumps(result)
+
+    def get_table_info(self, table):
+        table_data = self._db_client.get_table_data(table)
+        print(table_data)
+        return table_data
 
 
 if __name__ == '__main__':

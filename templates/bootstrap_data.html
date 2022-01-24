@@ -1,10 +1,76 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>$Title$</title>
-</head>
-<body>
-$END$
-</body>
-</html>
+{% extends "base.html" %}
+
+{% block content %}
+<div style="display:flex;">
+  <div class="container">
+    <h5>Comments table</h5>
+      <hr>
+  <table id="comments" class="table table-striped" style="margin-right:3%;" width="150">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Path</th>
+        <th>User ID</th>
+        <th>URL ID</th>
+        <th>Comment</th>
+        <th>Date</th>
+        <th>Last</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for comment in comments %}
+        <tr>
+          <td>{{ comment.id }}</td>
+          <td>{{ comment.path }}</td>
+          <td>{{ comment.user_id }}</td>
+          <td>{{ comment.url_id }}</td>
+          <td>{{ comment.comment }}</td>
+          <td>{{ comment.date }}</td>
+          <td>{{ comment.last }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="container">
+    <h5>Users table</h5>
+      <hr>
+  <table id="users" class="table table-striped" style="margin-right:3%;" width="5">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>User</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for user in users %}
+        <tr>
+          <td>{{ user.id }}</td>
+          <td>{{ user.user }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="container">
+    <h5>URL table</h5>
+      <hr>
+  <table id="urls" class="table table-striped" width="5">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>URL</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for url in urls %}
+        <tr>
+          <td>{{ url.id }}</td>
+          <td>{{ url.url }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endblock %}

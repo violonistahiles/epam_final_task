@@ -2,7 +2,7 @@ import datetime
 import os
 from typing import Any, Callable, Dict, List, Union
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Query, Session
@@ -136,6 +136,14 @@ class DBClient:
         else:
             path = self._path_pr.next_path()
         return path
+
+    @session_decorator
+    def get_table_data(self, session, table):
+        data = []
+        results = session.execute(select(table))
+        for result in results:
+            data.append(result.get_dict())
+        return data
 
     @session_decorator
     def add_comment(

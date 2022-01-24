@@ -14,6 +14,9 @@ class UserDB(Base):
     def __repr__(self):
         return f"User(id={self.id!r}, path={self.user!r})"
 
+    def get_dict(self):
+        return {'id': f'{self.id!r}', 'user': f'{self.user!r}'}
+
 
 class URLsDB(Base):
     """Database table to store unique urls"""
@@ -24,6 +27,9 @@ class URLsDB(Base):
 
     def __repr__(self):
         return f"User(id={self.id!r}, path={self.url!r})"
+
+    def get_dict(self):
+        return {'id': f'{self.id!r}', 'url': f'{self.url!r}'}
 
 
 class CommentsDB(Base):
@@ -43,3 +49,9 @@ class CommentsDB(Base):
                f" user_id={self.user_id!r}, url_id={self.url_id!r}," \
                f" comment={self.comment!r}, date={self.date!r}, " \
                f" last={self.last!r})"
+
+    def get_dict(self):
+        return {'id': f'{self.id!r}', 'path': f'{self.path!r}',
+                'user_id': f'{self.user_id!r}', 'url_id': f'{self.url_id!r}',
+                'comment': f'{self.comment!r}', 'date': f'{self.date!r}',
+                'last': f'{self.last!r}'}

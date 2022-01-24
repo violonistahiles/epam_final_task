@@ -1,10 +1,61 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>$Title$</title>
-</head>
-<body>
-$END$
-</body>
+<!doctype html>
+<html>
+  <head>
+    <title>{DataBase client}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-+0n0xVW2eSR5OomGNYDnhzAbDsOXxcvSN1TPprVMTNDbiYZCxYbOOl7+AMvyTG2x" crossorigin="anonymous">
+  </head>
+  <body>
+   <div class="container">
+    <hr>
+    <h5>Available commands</h5>
+    <table width="700" border="0" align="left" cellspacing="0" cellpadding="0">
+      <tbody>
+          <tr>
+            <td>{"add_comment":  ["parent_id", "url", "user", "comment"]}</td>
+          </tr>
+          <tr>
+            <td>{"ger_url_first_level_comments":  ["url"]}</td>
+          </tr>
+          <tr>
+            <td>{"get_comment_tree":  ["url", "comment_id"]}</td>
+          </tr>
+          <tr>
+            <td>{"get_user_history":  ["user", "do_sort"]}</td>
+          </tr>
+          <tr>
+            <td>{"get_report":  ["url", "user", "do_sort", "start", "end"]}</td>
+          </tr>
+      </tbody>
+    </table>
+   </div>
+   <br>
+   <div class="container">
+      <table width="700" border="0" align="center" cellspacing="0" cellpadding="0">
+        <tr>
+          <td>&nbsp;</td>
+          <td align="right">&nbsp;</td>
+        </tr>
+        <tr>
+          <td align="center">
+              <form action="" method="get">
+              <input size="80" name="textfield" value="Enter request here"/><br>
+              <button type="submit" formmethod="post">Submit</button>
+              </form>
+          </td>
+        </tr>
+      </table>
+  </div>
+   <br>
+    <div class="container">
+      <h2>Data tables</h2>
+      <hr>
+      {% block content %}{% endblock %}
+    </div>
+  <br>
+  <div class="container">
+    <h5>Response</h5>
+    <h5>{{ response }}</h5>
+  </div>
+  {% block scripts %}{% endblock %}
+  </body>
 </html>
