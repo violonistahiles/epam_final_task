@@ -144,7 +144,6 @@ class APIClient:
 
     def get_table_info(self, table):
         table_data = self._db_client.get_table_data(table)
-        print(table_data)
         return table_data
 
 
@@ -160,9 +159,9 @@ if __name__ == '__main__':
     # request = {'command': 'ger_url_first_level_comments',
     #            'url': 'url_1'}
     #
-    # request = {'command': 'get_comment_tree',
-    #            'url': 'url_1',
-    #            'comment_id': None}
+    # request = {"command": "get_comment_tree",
+    #            "url": "url_1",
+    #            "comment_id": "None"}
     #
     # request = {'command': 'get_user_history',
     #            'user': 'Luke',

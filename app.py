@@ -14,7 +14,7 @@ class App:
 
     def run(self):
 
-        if request.method == 'IPP':
+        if request.method == 'GET':
             users = self.api_client.get_table_info(UserDB)
             urls = self.api_client.get_table_info(URLsDB)
             comments = self.api_client.get_table_info(CommentsDB)
@@ -27,8 +27,9 @@ class App:
 
         elif request.method == 'POST':
             request_data = request.form['textfield']
+            # print(request_data, type(request_data))
             data = self.api_client.process_request(request_data)
-            print(data)
+            # print(data)
             users = self.api_client.get_table_info(UserDB)
             urls = self.api_client.get_table_info(URLsDB)
             comments = self.api_client.get_table_info(CommentsDB)
@@ -49,6 +50,7 @@ if __name__ == '__main__':
     print_tables(engine)
 
     application = App(engine)
+    application.api_client.get_table_info(UserDB)
 
     app.add_url_rule("/", view_func=application.run, methods=['GET', 'POST'])
     app.run()

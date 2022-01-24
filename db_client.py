@@ -142,7 +142,7 @@ class DBClient:
         data = []
         results = session.execute(select(table))
         for result in results:
-            data.append(result.get_dict())
+            data.append(result[0].get_dict())
         return data
 
     @session_decorator
