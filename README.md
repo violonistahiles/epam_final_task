@@ -1,6 +1,6 @@
 # Epam final task
 
-## Files discription
+## Files description
 
 ### Python files
 1. db_table.py - ORM models for database tables
