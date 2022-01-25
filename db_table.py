@@ -15,7 +15,8 @@ class UserDB(Base):
         return f"User(id={self.id!r}, path={self.user!r})"
 
     def get_dict(self):
-        return {'id': f'{self.id!r}', 'user': f'{self.user!r}'}
+        """Helpful method to get table instance representation"""
+        return {'id': f'{self.id!r}', 'user': f'{self.user}'}
 
 
 class URLsDB(Base):
@@ -29,7 +30,8 @@ class URLsDB(Base):
         return f"User(id={self.id!r}, path={self.url!r})"
 
     def get_dict(self):
-        return {'id': f'{self.id!r}', 'url': f'{self.url!r}'}
+        """Helpful method to get table instance representation"""
+        return {'id': f'{self.id!r}', 'url': f'{self.url}'}
 
 
 class CommentsDB(Base):
@@ -51,7 +53,8 @@ class CommentsDB(Base):
                f" last={self.last!r})"
 
     def get_dict(self):
-        return {'id': f'{self.id!r}', 'path': f'{self.path!r}',
+        """Helpful method to get table instance representation"""
+        return {'id': f'{self.id!r}', 'path': f'{self.path}',
                 'user_id': f'{self.user_id!r}', 'url_id': f'{self.url_id!r}',
-                'comment': f'{self.comment!r}', 'date': f'{self.date!r}',
+                'comment': f'{self.comment}', 'date': f'{self.date!r}',
                 'last': f'{self.last!r}'}

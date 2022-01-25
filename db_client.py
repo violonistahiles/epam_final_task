@@ -83,7 +83,8 @@ class DBClient:
 
     def _get_id(self, session: Session, table: Base, **kwargs: Any) -> int:
         """
-        Get element ID from database table
+        Get element ID from database table if element exists otherwise create
+        new element in table
         :param session: Manages persistence operations for ORM-mapped objects
         :type session: sqlalchemy.orm.Session
         :param table: Database table
@@ -187,7 +188,7 @@ class DBClient:
             path = self._create_child_path(session, parent.path)
             url_id = parent.url_id
         else:
-            path, = self._create_first_level_path(session)
+            path = self._create_first_level_path(session)
             url_id = self._get_id(session, URLsDB, url=url)
         current_time = datetime.datetime.now().timestamp()
         kwargs = {'path': path,
