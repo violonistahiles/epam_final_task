@@ -4,3 +4,4 @@ isort
 pytest
 SQLAlchemy
 alembic
+flask
