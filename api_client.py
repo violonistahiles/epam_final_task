@@ -4,11 +4,8 @@ import json
 import os
 from typing import Any, Callable, Dict, List, Union
 
-from sqlalchemy import create_engine
-
 from db_client import DBClient
 from path_worker import PathWorker
-from tester import create_models, print_tables
 
 
 class RequestData:
@@ -17,8 +14,8 @@ class RequestData:
         """
         :param command: Requested command
         :type command: str
-        :param request_data: Request parameters
-        :type request_data: Dict
+        :param attrs: Request parameters
+        :type attrs: Dict
         """
         self.command = command
         self.attrs = attrs
@@ -55,6 +52,7 @@ class APIClient:
         with open(commands_file) as fi:
             self._commands = json.load(fi)
 
+        self.report_dir = os.path.join(curr_path, 'build')
         self._db_client = DBClient(engine)
         self._keys = self._db_client.keys
         self._pworker = PathWorker()
@@ -79,33 +77,35 @@ class APIClient:
 
         return RequestData(command, request_attr)
 
-    @staticmethod
-    def _save_json(data_dict: Dict, data_dir: str) -> str:
+    def _check_dir(self):
+        """Check if report directory is exists otherwise create it"""
+        if not os.path.exists(self.report_dir):
+            os.mkdir(self.report_dir)
+
+    def _save_json(self, data_dict: Dict) -> str:
         """
         Save query result to .json file
         :param data_dict: Dictionary with query result
         :type data_dict: Dict
-        :param data_dir: Path to report folder
-        :type data_dir: str
         :return: Path to saved .json file
         :rtype: str
         """
-        data_path = os.path.join(data_dir, 'report.json')
+        self._check_dir()
+        data_path = os.path.join(self.report_dir, 'report.json')
         with open(data_path, 'w') as f:
             json.dump(data_dict, f)
         return data_path
 
-    def _save_csv(self, data: Dict, data_dir: str) -> str:
+    def _save_csv(self, data: Dict) -> str:
         """
         Save query result to .csv file
         :param data: Dictionary with values for single line in .csv file
         :type data: Dict
-        :param data_dir: Path to report folder
-        :type data_dir: str
         :return: Path to saved .csv file
         :rtype: str
         """
-        data_path = os.path.join(data_dir, 'report.csv')
+        self._check_dir()
+        data_path = os.path.join(self.report_dir, 'report.csv')
         with open(data_path, 'w', newline='') as fi:
             report = csv.writer(fi)
             report.writerow(self._db_client.keys)
@@ -134,8 +134,7 @@ class APIClient:
             result = self.get_user_history(**data.attrs)
         elif data.command == 'get_report':
             data_dict = self.prepare_data_to_report(**data.attrs)
-            report_dir = os.path.join(os.getcwd(), 'build')
-            report_path = self._save_csv(data_dict, report_dir)
+            report_path = self._save_csv(data_dict)
             result = report_path
         else:
             result = self._wrong_response_message
@@ -164,9 +163,7 @@ class APIClient:
         :rtype: Dict
         """
         result = self._db_client.get_url_inheritors(url, **kwargs)
-        print(result, type(result))
         comments_dict = self._pworker.create_sorted_dict(result, self._keys)
-        print(comments_dict, type(comments_dict))
 
         return comments_dict
 
@@ -240,33 +237,3 @@ class APIClient:
             result_dict = {}
 
         return result_dict
-
-
-if __name__ == '__main__':
-    engine = create_engine('sqlite:///:memory:')
-    create_models(engine)
-    # request = {"command": "add_comment", "parent_id": 1,
-    # "url": "url_1", "user": "Dart", "comment": "AXAXA"}
-    #
-    # request = {"command": "ger_url_first_level_comments", "url": "url_1"}
-    #
-    # request = {"command": "get_comment_tree", "url": "url_1"}
-    #            "comment_id": "None"}
-    #
-    # request = {'command': 'get_user_history',
-    #            'user': 'Luke',
-    #            'do_sort': True}
-
-    request = {'command': 'get_report',
-               'url': 'url_1',
-               'user': 'Luke',
-               'do_sort': True,
-               'start': 100,
-               'end': None}
-
-    print(request)
-    api_client = APIClient(engine)
-    resp = api_client.process_request(json.dumps(request))
-    print(resp)
-
-    print_tables(engine)

@@ -1,8 +1,7 @@
 import datetime
-import os
 from typing import Any, Callable, Dict, List
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Query, Session
@@ -10,7 +9,6 @@ from sqlalchemy.orm import Query, Session
 from db_table import Base, CommentsDB, URLsDB, UserDB
 from path_worker import PathWorker
 from query_helper import QueryHelper
-from tester import create_models, print_tables
 
 
 def session_decorator(func: Callable) -> Callable:
@@ -274,41 +272,3 @@ class DBClient:
         query = query.filter(CommentsDB.user_id == user_id)
         query = self._qhelper.modify_data(query, **kwargs)
         return query.all()
-
-
-if __name__ == '__main__':
-    engine = create_engine('sqlite:///:memory:')
-    create_models(engine)
-    db_client = DBClient(engine)
-    _ = db_client.add_comment(1, 'url_1', 'Luke', 'SkyWalker?')
-    _ = db_client.add_comment(None, 'url_3', 'Luke', 'SkyWalker?')
-    _ = db_client.add_comment(3, 'url_2', 'Dart', 'ALALA')
-    _ = db_client.add_comment(2, 'url_2', 'Dart', 'StarKiller')
-    _ = db_client.add_comment(1, 'url_1', 'Jaka', 'StarLord')
-    _ = db_client.add_comment(None, 'url_1', 'Wuki', 'AAARRRR')
-
-    comments = db_client.get_url_comments('url_1')
-    comments_dict = db_client.get_comment_tree(url='url_1', comment_id=1)
-    user_comments = db_client.get_user_history(user='Luke', do_sort=True)
-
-    curr_path = os.getcwd()
-    results_path = os.path.join(curr_path, 'build')
-
-    csv_path = os.path.join(results_path, 'result.csv')
-    db_client.prepare_data_to_report(csv_path, user='', url='url_1',
-                                     do_sort=True, end=600)
-
-    print(comments_dict)
-    print(comments)
-    print(user_comments)
-
-    # print("User comments")
-    # for comment in user_comments:
-    #     print(user_comments[comment])
-    #
-    # print("URL first level")
-    # for comment in comments:
-    #     print(comments[comment])
-    # print("Comments tree")
-
-    print_tables(engine)
