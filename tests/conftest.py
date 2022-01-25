@@ -19,7 +19,7 @@ def database():
 
     comment_1 = CommentsDB(path='1', user_id=1, url_id=1,
                            comment='first comment',
-                           date=5.0,
+                           date=10.0,
                            last=False)
 
     comment_2 = CommentsDB(path='1.1', user_id=1, url_id=1,
@@ -34,7 +34,7 @@ def database():
 
     comment_4 = CommentsDB(path='2', user_id=2, url_id=2,
                            comment='first comment',
-                           date=20.0,
+                           date=5.0,
                            last=False)
 
     comment_5 = CommentsDB(path='1.1.1', user_id=2, url_id=1,
