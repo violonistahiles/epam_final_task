@@ -1,5 +1,5 @@
 import datetime
-from typing import Any, Union
+from typing import Any, Dict, Union
 
 from sqlalchemy import and_, not_
 from sqlalchemy.exc import NoResultFound
@@ -10,7 +10,11 @@ from db_table import CommentsDB, UserDB
 
 class QueryHelper:
     """Service class to handle basic operations with database query"""
-    def __init__(self, filters):
+    def __init__(self, filters: Dict):
+        """
+        :param filters: Filters to find materialized path patterns
+        :type filters: Dict
+        """
         self._path_filters = filters
         self.keys = ['comment_id', 'user', 'comment', 'date']
 

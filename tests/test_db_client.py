@@ -1,9 +1,11 @@
+import pytest
 from sqlalchemy.orm import Session
 
 from db_client import DBClient
 from db_table import CommentsDB, UserDB
 
 
+@pytest.mark.usefixtures("database")
 def test_get_id_when_id_is_exists(database):
     """Testing get_id method when element in table exists"""
     request_data = {'user': 'user_2'}
@@ -17,6 +19,7 @@ def test_get_id_when_id_is_exists(database):
     assert test_id == correct_id
 
 
+@pytest.mark.usefixtures("database")
 def test_get_id_when_id_is_not_exists(database):
     """Testing get_id method when element in table don't exists"""
     request_data = {'user': 'user_3'}
@@ -30,6 +33,7 @@ def test_get_id_when_id_is_not_exists(database):
     assert test_id == correct_id
 
 
+@pytest.mark.usefixtures("database")
 def test_create_child_path_when_it_is_first_child(database):
     """Testing child path creation when new comment is first inheritor"""
     parent_path = '1.2'
@@ -42,6 +46,7 @@ def test_create_child_path_when_it_is_first_child(database):
     assert test_path == correct_path
 
 
+@pytest.mark.usefixtures("database")
 def test_create_child_path(database):
     """Testing child path creation when inheritors are already exists"""
     parent_path = '1.1'
@@ -54,6 +59,7 @@ def test_create_child_path(database):
     assert test_path == correct_path
 
 
+@pytest.mark.usefixtures("database")
 def test_create_first_level_path_when_comment_is_first(database):
     """Testing first level path creation when it is first comment"""
 
@@ -70,6 +76,7 @@ def test_create_first_level_path_when_comment_is_first(database):
     assert test_path == correct_path
 
 
+@pytest.mark.usefixtures("database")
 def test_create_first_level_path_when_comments_are_exist(database):
     """Testing first level path creation when comments are already exist"""
     db_client = DBClient(database)
@@ -81,6 +88,7 @@ def test_create_first_level_path_when_comments_are_exist(database):
     assert test_path == correct_path
 
 
+@pytest.mark.usefixtures("database")
 def test_get_table_data(database):
     """Testing get_table_data method works correctly"""
     table = 'urls'
@@ -93,6 +101,7 @@ def test_get_table_data(database):
     assert test_result == correct_result
 
 
+@pytest.mark.usefixtures("database")
 def test_add_comment(database):
     """Testing add_comment method works correctly"""
     parent_id = 1
