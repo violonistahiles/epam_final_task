@@ -1,7 +1,25 @@
-from typing import Dict, List
+from typing import Callable, Dict, List
 
 
-class PathProcessor:
+def result_decorator(func: Callable) -> Callable:
+    """
+    Decorator to exclude comments processing if it is already dictionary type
+    :param func: Processing function
+    :type func: Callable
+    :return: Decorated function
+    :rtype: Callable
+    """
+    def wrapper(comments, *args, **kwargs):
+        """Return comments if it is already dict"""
+        if isinstance(comments, dict):
+            return comments
+        result = func(comments, *args, **kwargs)
+
+        return result
+    return wrapper
+
+
+class PathWorker:
     """Service class to perform operations with materialized paths"""
     def __init__(self):
         self.filters = {'inherits_one_level': r'\..*\.',
@@ -49,6 +67,7 @@ class PathProcessor:
         return path if first else str(int(path) + 1)
 
     @staticmethod
+    @result_decorator
     def cut_paths(comments: List) -> List:
         """
         Remove first level path from comments path (1.1.2 -> 1.2)
@@ -57,6 +76,7 @@ class PathProcessor:
         :return: List of comments with modified paths
         :rtype: List
         """
+        # Zero index is related to materialized path
         result = []
         for i, comment in enumerate(comments):
             path = comment[0]
@@ -66,18 +86,21 @@ class PathProcessor:
         return result
 
     @staticmethod
+    @result_decorator
     def create_sorted_dict(comments: List, keys: List) -> Dict:
         """
         Create nested dictionary with hierarchical comments data
         :param comments: List of comments data
         :type comments: List
-        :param keys: List of keys for creating dictionary
+        :param keys: List of keys for creating dictionary. Corresponds to
+                     one comment elements after zero index
         :type keys: List
         :return: Nested dictionary
         :rtype: Dict
         """
         result = dict()
         # Sort comments by its path length and path order
+        # Zero index is related to materialized path
         sorted_comments = sorted(comments,
                                  key=lambda x: (len(x[0].split('.')), x[0]))
         # Create dictionary for fixing comments order in final dictionary
@@ -106,12 +129,14 @@ class PathProcessor:
         return result
 
     @staticmethod
+    @result_decorator
     def create_dict(comments: List, keys: List) -> Dict:
         """
         Create unordered dictionary with comments
         :param comments: List of comments data
         :type comments: List
-        :param keys: List of keys for creating dictionary
+        :param keys: List of keys for creating dictionary. Corresponds to
+                     one comment elements after zero index
         :type keys: List
         :return: Dictionary with comments
         :rtype: Dict

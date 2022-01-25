@@ -12,6 +12,7 @@ class QueryHelper:
     """Service class to handle basic operations with database query"""
     def __init__(self, filters):
         self._path_filters = filters
+        self.keys = ['comment_id', 'user', 'comment', 'date']
 
     @staticmethod
     def _filter_by_time(

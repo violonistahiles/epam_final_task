@@ -2,11 +2,12 @@ import csv
 import datetime
 import json
 import os
-from typing import Callable, Dict
+from typing import Any, Callable, Dict, List, Union
 
 from sqlalchemy import create_engine
 
 from db_client import DBClient
+from path_worker import PathWorker
 from tester import create_models, print_tables
 
 
@@ -25,20 +26,17 @@ class RequestData:
 
 def parser_decorator(func: Callable) -> Callable:
     """
-    Decorator to perform database session and close it after transaction
+    Decorator to handle errors while parsing request string
     :param func: Function with database transactions
     :type func: Callable
-    :return: Function which decorate initial function with ORM Session
+    :return: Decorated function
     :rtype: Callable
     """
     def wrapper(self, *args, **kwargs):
-        """
-        Perform initial function under ORM Session and return empty dict
-        if transaction cant get result
-        """
+        """Return 'wrong command' parsed data if error occurs"""
         try:
             result = func(self, *args, **kwargs)
-        except (KeyError, ValueError):
+        except (KeyError, ValueError, TypeError):
             return RequestData('Wrong command', '')
         return result
 
@@ -49,7 +47,6 @@ class APIClient:
     """Class to process requests"""
     def __init__(self, engine):
         """
-        Initialize class
         :param engine: Object establishing connection to database
         :type engine: sqlalchemy.engine.Engine
         """
@@ -59,6 +56,9 @@ class APIClient:
             self._commands = json.load(fi)
 
         self._db_client = DBClient(engine)
+        self._keys = self._db_client.keys
+        self._pworker = PathWorker()
+        self._wrong_response_message = {'Response': 'Wrong command'}
 
     @parser_decorator
     def _parse_request(self, request: str) -> RequestData:
@@ -127,40 +127,130 @@ class APIClient:
         if data.command == 'add_comment':
             result = self._db_client.add_comment(**data.attrs)
         elif data.command == 'ger_url_first_level_comments':
-            result = self._db_client.get_url_comments(**data.attrs)
+            result = self.get_url_comments(**data.attrs)
         elif data.command == 'get_comment_tree':
-            result = self._db_client.get_comment_tree(**data.attrs)
+            result = self.get_comment_tree(**data.attrs)
         elif data.command == 'get_user_history':
-            result = self._db_client.get_user_history(**data.attrs)
+            result = self.get_user_history(**data.attrs)
         elif data.command == 'get_report':
-            data_dict = self._db_client.prepare_data_to_report(**data.attrs)
+            data_dict = self.prepare_data_to_report(**data.attrs)
             report_dir = os.path.join(os.getcwd(), 'build')
             report_path = self._save_csv(data_dict, report_dir)
             result = report_path
         else:
-            result = {'Response': 'Wrong command'}
+            result = self._wrong_response_message
 
         return json.dumps(result)
 
-    def get_table_info(self, table):
+    def get_table_data(self, table: str) -> List[Dict]:
+        """
+        Get all information from table
+        :param table: Table name from database
+        :type table: str
+        :return: List of tables rows
+        :rtype: List[Dict]
+        """
         table_data = self._db_client.get_table_data(table)
         return table_data
+
+    def get_url_comments(self, url: str, **kwargs: Any) -> Dict:
+        """
+        Create json for requested url inheritors
+        :param url: URL Address
+        :type url: str
+        :param kwargs: Additional parameters to filter query
+        :type kwargs: Any
+        :return: Dictionary with comments
+        :rtype: Dict
+        """
+        result = self._db_client.get_url_inheritors(url, **kwargs)
+        print(result, type(result))
+        comments_dict = self._pworker.create_sorted_dict(result, self._keys)
+        print(comments_dict, type(comments_dict))
+
+        return comments_dict
+
+    def get_comment_tree(
+            self,
+            url: str,
+            comment_id: Union[None, str] = None,
+            first_level: bool = False,
+            **kwargs: Any
+    ) -> Dict:
+        """
+        Create json for requested url or comment inheritors
+        :param url: URL address
+        :type url: str
+        :param comment_id: Comment ID form comments table
+        :type comment_id: int
+        :param first_level: Flag to get only first level comments
+        :type first_level: bool
+        :param kwargs: Additional parameters to filter query
+        :type kwargs: Any
+        :return: Dictionary with comments
+        :rtype: Dict
+        """
+        if comment_id:
+            tree = self._db_client.get_comment_inheritors(comment_id)
+            tree = self._pworker.cut_paths(tree)
+        else:
+            tree = self._db_client.get_url_inheritors(url, first_level,
+                                                      **kwargs)
+        comments_dict = self._pworker.create_sorted_dict(tree, self._keys)
+        return comments_dict
+
+    def get_user_history(self, user: str, **kwargs: Any) -> Dict:
+        """
+        Create json for requested user comments history
+        :param user: Username
+        :type user: str
+        :param kwargs: Additional parameters to filter query
+        :type kwargs: Any
+        :return: Dictionary with comments
+        :rtype: Dict
+        """
+        result = self._db_client.get_user_comments(user, **kwargs)
+        comments_dict = self._pworker.create_dict(result, self._keys)
+        return comments_dict
+
+    def prepare_data_to_report(
+            self,
+            url: Union[None, str] = None,
+            user: Union[None, str] = None,
+            **kwargs: Any
+    ) -> Dict:
+        """
+        Get user or url comments history
+        :param user: Username
+        :type user: str
+        :param url: URL address
+        :type url: str
+        :param kwargs: Additional parameters to filter query
+        :type kwargs: Any
+        :return: Dictionary with comments
+        :rtype: Dict
+        """
+        if user:
+            result_dict = self.get_user_history(user, **kwargs)
+        elif url:
+            result = self._db_client.get_url_inheritors(url, first_level=False,
+                                                        **kwargs)
+            result_dict = self._pworker.create_dict(result, self._keys)
+        else:
+            result_dict = {}
+
+        return result_dict
 
 
 if __name__ == '__main__':
     engine = create_engine('sqlite:///:memory:')
     create_models(engine)
-    # request = {'command': 'add_comment',
-    #            'parent_id': 1,
-    #            'url': 'url_1',
-    #            'user': 'Dart',
-    #            'comment': 'AXAXA'}
+    # request = {"command": "add_comment", "parent_id": 1,
+    # "url": "url_1", "user": "Dart", "comment": "AXAXA"}
     #
-    # request = {'command': 'ger_url_first_level_comments',
-    #            'url': 'url_1'}
+    # request = {"command": "ger_url_first_level_comments", "url": "url_1"}
     #
-    # request = {"command": "get_comment_tree",
-    #            "url": "url_1",
+    # request = {"command": "get_comment_tree", "url": "url_1"}
     #            "comment_id": "None"}
     #
     # request = {'command': 'get_user_history',

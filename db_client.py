@@ -1,6 +1,6 @@
 import datetime
 import os
-from typing import Any, Callable, Dict, List, Union
+from typing import Any, Callable, Dict, List
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.engine import Engine
@@ -8,7 +8,7 @@ from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Query, Session
 
 from db_table import Base, CommentsDB, URLsDB, UserDB
-from path_worker import PathProcessor
+from path_worker import PathWorker
 from query_helper import QueryHelper
 from tester import create_models, print_tables
 
@@ -30,7 +30,7 @@ def session_decorator(func: Callable) -> Callable:
             try:
                 result = func(self, session, *args, **kwargs)
             except NoResultFound:
-                return {}
+                return {'Response': 'No results'}
         return result
 
     return wrapper
@@ -45,9 +45,11 @@ class DBClient:
         :type engine: sqlalchemy.engine.Engine
         """
         self._engine = engine
-        self._path_pr = PathProcessor()
-        self._qhelper = QueryHelper(self._path_pr.filters)
-        self.keys = ['comment_id', 'user', 'comment', 'date']
+        self._pworker = PathWorker()
+        self._qhelper = QueryHelper(self._pworker.filters)
+        self._tables = {'users': UserDB, 'urls': URLsDB,
+                        'comments': CommentsDB}
+        self.keys = self._qhelper.keys
 
     @staticmethod
     def _select(session: Session, table: Base, **kwargs: Any) -> Query:
@@ -112,10 +114,10 @@ class DBClient:
         query = self._qhelper.modify_data(query, last=True)
         last_child = self._qhelper.check_query(query)
         if last_child:
-            path = self._path_pr.next_child_path(last_child.path, first=False)
+            path = self._pworker.next_child_path(last_child.path, first=False)
             last_child.last = False
         else:
-            path = self._path_pr.next_child_path(parent_path)
+            path = self._pworker.next_child_path(parent_path)
         return path
 
     def _create_first_level_path(self, session: Session) -> str:
@@ -131,19 +133,25 @@ class DBClient:
         query = self._qhelper.modify_data(query, last=True)
         last_comment = self._qhelper.check_query(query)
         if last_comment:
-            path = self._path_pr.next_path(last_comment.path, first=False)
+            path = self._pworker.next_path(last_comment.path, first=False)
             last_comment.last = False
         else:
-            path = self._path_pr.next_path()
+            path = self._pworker.next_path()
         return path
 
     @session_decorator
-    def get_table_data(self, session, table):
-        data = []
-        results = session.execute(select(table))
-        for result in results:
-            data.append(result[0].get_dict())
-        return data
+    def get_table_data(self, session: Session, table: str) -> List[Dict]:
+        """
+        Get all information from table
+        :param session: Manages persistence operations for ORM-mapped objects
+        :type session: sqlalchemy.orm.Session
+        :param table: Table name from database
+        :type table: str
+        :return: List of tables rows
+        :rtype: List[Dict]
+        """
+        results = session.execute(select(self._tables[table]))
+        return [result[0].get_dict() for result in results]
 
     @session_decorator
     def add_comment(
@@ -173,7 +181,6 @@ class DBClient:
         :return: Created comment ID
         :rtype: int
         """
-        print(parent_id, url)
         user_id = self._get_id(session, UserDB, user=user)
         if parent_id:
             parent = self._select(session, CommentsDB, id=parent_id).one()
@@ -194,7 +201,7 @@ class DBClient:
         return comment_id
 
     @session_decorator
-    def _get_comment_inheritors(
+    def get_comment_inheritors(
             self, session: Session, comment_id: int
     ) -> List:
         """
@@ -205,13 +212,13 @@ class DBClient:
         :type comment_id: int
         :return: List of inheritors
         """
-        parent = self._select(session, CommentsDB, id=comment_id).one()
+        parent = self._select(session, CommentsDB, id=comment_id).one().id
         query = self._qhelper.get_base_query(session)
         query = self._qhelper.child_path(query, parent.path)
         return query.all()
 
     @session_decorator
-    def _ger_url_inheritors(
+    def get_url_inheritors(
             self,
             session: Session,
             url: str,
@@ -234,7 +241,7 @@ class DBClient:
         :type kwargs: Any
         :return: List of inheritors
         """
-        url_id = self._get_id(session, URLsDB, url=url)
+        url_id = self._select(session, URLsDB, url=url).one().id
         query = self._qhelper.get_base_query(session)
         query = query.filter(CommentsDB.url_id == url_id)
         query = self._qhelper.modify_data(query, **kwargs)
@@ -244,7 +251,7 @@ class DBClient:
         return query.all()
 
     @session_decorator
-    def _get_user_comments(
+    def get_user_comments(
             self, session: Session, user: str, **kwargs: Any
     ) -> List:
         """
@@ -261,94 +268,11 @@ class DBClient:
         :type kwargs: Any
         :return: List of inheritors
         """
-        user_id = self._get_id(session, UserDB, user=user)
+        user_id = self._select(session, UserDB, user=user).one().id
         query = self._qhelper.get_base_query(session)
         query = query.filter(CommentsDB.user_id == user_id)
         query = self._qhelper.modify_data(query, **kwargs)
         return query.all()
-
-    def get_url_comments(self, url: str, **kwargs: Any) -> Dict:
-        """
-        Create json for requested url inheritors
-        :param url: URL Address
-        :type url: str
-        :param kwargs: Additional parameters to filter query
-        :type kwargs: Any
-        :return: Dictionary with comments
-        :rtype: Dict
-        """
-        result = self._ger_url_inheritors(url, **kwargs)
-        comments_dict = self._path_pr.create_sorted_dict(result, self.keys)
-        return comments_dict
-
-    def get_comment_tree(
-            self,
-            url: str,
-            comment_id: Union[None, str] = None,
-            first_level: bool = False,
-            **kwargs: Any
-    ) -> Dict:
-        """
-        Create json for requested url or comment inheritors
-        :param url: URL address
-        :type url: str
-        :param comment_id: Comment ID form comments table
-        :type comment_id: int
-        :param first_level: Flag to get only first level comments
-        :type first_level: bool
-        :param kwargs: Additional parameters to filter query
-        :type kwargs: Any
-        :return: Dictionary with comments
-        :rtype: Dict
-        """
-        if comment_id:
-            tree = self._get_comment_inheritors(comment_id)
-            tree = self._path_pr.cut_paths(tree)
-        else:
-            tree = self._ger_url_inheritors(url, first_level, **kwargs)
-        comments_dict = self._path_pr.create_sorted_dict(tree, self.keys)
-        return comments_dict
-
-    def get_user_history(self, user: str, **kwargs: Any) -> Dict:
-        """
-        Create json for requested user comments history
-        :param user: Username
-        :type user: str
-        :param kwargs: Additional parameters to filter query
-        :type kwargs: Any
-        :return: Dictionary with comments
-        :rtype: Dict
-        """
-        result = self._get_user_comments(user, **kwargs)
-        comments_dict = self._path_pr.create_dict(result, self.keys)
-        return comments_dict
-
-    def prepare_data_to_report(
-            self,
-            url: Union[None, str] = None,
-            user: Union[None, str] = None,
-            **kwargs: Any
-    ) -> Dict:
-        """
-        Get user or url comments history
-        :param user: Username
-        :type user: str
-        :param url: URL address
-        :type url: str
-        :param kwargs: Additional parameters to filter query
-        :type kwargs: Any
-        :return: Dictionary with comments
-        :rtype: Dict
-        """
-        if user:
-            result_dict = self.get_user_history(user, **kwargs)
-        elif url:
-            result = self._ger_url_inheritors(url, first_level=False, **kwargs)
-            result_dict = self._path_pr.create_dict(result, self.keys)
-        else:
-            result_dict = {}
-
-        return result_dict
 
 
 if __name__ == '__main__':
