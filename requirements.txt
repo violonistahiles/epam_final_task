@@ -2,3 +2,6 @@ pre-commit
 flake8
 isort
 pytest
+SQLAlchemy
+alembic
+flask

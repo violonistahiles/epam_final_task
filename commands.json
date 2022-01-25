@@ -1,0 +1,5 @@
+{"add_comment":  ["parent_id", "url", "user", "comment"],
+"ger_url_first_level_comments":  ["url"],
+"get_comment_tree":  ["url", "comment_id"],
+"get_user_history":  ["user", "do_sort"],
+"get_report":  ["url", "user", "do_sort", "start", "end"]}
