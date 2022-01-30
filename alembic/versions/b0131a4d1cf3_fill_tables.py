@@ -8,7 +8,7 @@ Create Date: 2022-01-25 00:00:33.716993
 from sqlalchemy import orm
 
 from alembic import op
-from db_table import CommentsDB, URLsDB, UserDB
+from db_backend.db_table import CommentsDB, URLsDB, UserDB
 
 # revision identifiers, used by Alembic.
 revision = 'b0131a4d1cf3'

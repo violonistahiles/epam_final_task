@@ -1,9 +1,9 @@
 import pytest
 from sqlalchemy.orm import Session
 
-from db_table import CommentsDB
-from path_worker import PathWorker
-from query_helper import QueryHelper
+from db_backend.db_table import CommentsDB
+from db_backend.path_worker import PathWorker
+from db_backend.query_helper import QueryHelper
 
 
 @pytest.mark.usefixtures("database")

@@ -6,9 +6,9 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Query, Session
 
-from db_table import Base, CommentsDB, URLsDB, UserDB
-from path_worker import PathWorker
-from query_helper import QueryHelper
+from .db_table import Base, CommentsDB, URLsDB, UserDB
+from .path_worker import PathWorker
+from .query_helper import QueryHelper
 
 
 def session_decorator(func: Callable) -> Callable:

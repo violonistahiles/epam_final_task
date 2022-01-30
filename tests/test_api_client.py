@@ -1,6 +1,6 @@
 import json
 
-from api_client import APIClient, RequestData
+from db_backend.api_client import APIClient, RequestData
 
 
 class FakeDBClient:

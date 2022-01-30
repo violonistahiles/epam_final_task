@@ -1,4 +1,4 @@
-from path_worker import PathWorker, result_decorator
+from db_backend.path_worker import PathWorker, result_decorator
 
 
 def test_result_decorator():

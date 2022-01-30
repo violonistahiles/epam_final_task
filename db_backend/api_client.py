@@ -4,8 +4,8 @@ import json
 import os
 from typing import Any, Callable, Dict, List, Union
 
-from db_client import DBClient
-from path_worker import PathWorker
+from .db_client import DBClient
+from .path_worker import PathWorker
 
 
 class RequestData:
@@ -48,15 +48,15 @@ class APIClient:
         :type engine: sqlalchemy.engine.Engine
         """
         curr_path = os.getcwd()
-        commands_file = os.path.join(curr_path, 'commands.json')
+        commands_file = os.path.join(curr_path, 'commands', 'commands.json')
         with open(commands_file) as fi:
             self._commands = json.load(fi)
 
-        self.report_dir = os.path.join(curr_path, 'build')
+        self._report_dir = os.path.join(curr_path, 'build')
         self._db_client = DBClient(engine)
         self._keys = self._db_client.keys
         self._pworker = PathWorker()
-        self._wrong_response_message = {'Response': 'Wrong command'}
+        self._wrong_response_message = {'Response': 'Wrong command!'}
 
     @parser_decorator
     def _parse_request(self, request: str) -> RequestData:
@@ -79,8 +79,8 @@ class APIClient:
 
     def _check_dir(self):
         """Check if report directory is exists otherwise create it"""
-        if not os.path.exists(self.report_dir):
-            os.mkdir(self.report_dir)
+        if not os.path.exists(self._report_dir):
+            os.mkdir(self._report_dir)
 
     def _save_json(self, data_dict: Dict) -> str:
         """
@@ -91,7 +91,7 @@ class APIClient:
         :rtype: str
         """
         self._check_dir()
-        data_path = os.path.join(self.report_dir, 'report.json')
+        data_path = os.path.join(self._report_dir, 'report.json')
         with open(data_path, 'w') as f:
             json.dump(data_dict, f)
         return data_path
@@ -105,7 +105,7 @@ class APIClient:
         :rtype: str
         """
         self._check_dir()
-        data_path = os.path.join(self.report_dir, 'report.csv')
+        data_path = os.path.join(self._report_dir, 'report.csv')
         with open(data_path, 'w', newline='') as fi:
             report = csv.writer(fi)
             report.writerow(self._db_client.keys)

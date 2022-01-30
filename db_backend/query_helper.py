@@ -5,7 +5,7 @@ from sqlalchemy import and_, not_
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Query, Session
 
-from db_table import CommentsDB, UserDB
+from .db_table import CommentsDB, UserDB
 
 
 class QueryHelper:
