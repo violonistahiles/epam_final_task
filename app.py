@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request
 from sqlalchemy import create_engine
 
-from api_client import APIClient
+from db_backend.api_client import APIClient
 
 app = Flask(__name__)
 
@@ -38,9 +38,9 @@ class App:
 
 
 if __name__ == '__main__':
-    engine = create_engine('sqlite:///main.db')
+    engine = create_engine('sqlite:///database/main.db')
     # app.config["SQLALCHEMY_DATABASE_URI"] = 'sqlite:///main.db'
 
     application = App(engine)
     app.add_url_rule("/", view_func=application.run, methods=['GET', 'POST'])
-    app.run()
+    app.run(debug=True)

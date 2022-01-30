@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from db_table import Base, CommentsDB, URLsDB, UserDB
+from db_backend.db_table import Base, CommentsDB, URLsDB, UserDB
 
 
 @pytest.fixture

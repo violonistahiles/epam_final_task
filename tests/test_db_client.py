@@ -1,8 +1,8 @@
 import pytest
 from sqlalchemy.orm import Session
 
-from db_client import DBClient
-from db_table import CommentsDB, UserDB
+from db_backend.db_client import DBClient
+from db_backend.db_table import CommentsDB, UserDB
 
 
 @pytest.mark.usefixtures("database")
