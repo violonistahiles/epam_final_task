@@ -43,4 +43,4 @@ if __name__ == '__main__':
 
     application = App(engine)
     app.add_url_rule("/", view_func=application.run, methods=['GET', 'POST'])
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0')
