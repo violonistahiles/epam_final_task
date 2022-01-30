@@ -5,4 +5,4 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - E:\pyEPAM\epam_final_task\database:/home/app/database
+      - ./database:/home/app/database
